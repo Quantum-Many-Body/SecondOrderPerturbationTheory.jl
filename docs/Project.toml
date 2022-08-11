@@ -1,0 +1,3 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+SecondOrderPerturbationTheory = "8462b829-71c0-4d21-b443-e94185bb4b24"

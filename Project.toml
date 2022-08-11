@@ -1,0 +1,7 @@
+name = "SecondOrderPerturbationTheory"
+uuid = "8462b829-71c0-4d21-b443-e94185bb4b24"
+authors = ["wwangnju <wwangnju@163.com> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1.6"
