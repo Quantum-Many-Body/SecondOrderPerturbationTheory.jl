@@ -8,7 +8,12 @@ Documentation for [SecondOrderPerturbationTheory](https://github.com/Quantum-Man
 
 ```@index
 ```
+## Getting Started
 
+[Examples of second order perturbation theory](@ref examples)
+
+
+## Manuals
 ```@autodocs
 Modules = [SecondOrderPerturbationTheory]
 ```

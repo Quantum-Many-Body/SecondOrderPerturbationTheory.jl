@@ -260,6 +260,8 @@ end
 
 """
     SecondOrderPerturbation{B<:BinaryConfigure, L<:PickState} <: Transformation
+    (::SecondOrderPerturbation)(H₁::Generator, p₀::Dict{T,<:ProjectState}, qₚ::Dict{T,<:ProjectState}, qₘ::Dict{T,<:ProjectState}, bond::Bond) where T<:AbstractPID  -> SOPTMatrix
+    (::SecondOrderPerturbation)(H₀::Generator, H₁::Generator, bond::Bond) -> SOPTMatrix
 
 A type.
 """
@@ -270,11 +272,6 @@ struct SecondOrderPerturbation{B<:BinaryConfigure, L<:PickState} <: Transformati
         new{typeof(bc), typeof(ls)}(bc, ls)
     end
 end
-"""
-    (sodp::SecondOrderPerturbation)(H₁::Generator, p₀::Dict{T,<:ProjectState}, qₚ::Dict{T,<:ProjectState}, qₘ::Dict{T,<:ProjectState}, bond::Bond) where T<:AbstractPID  -> SOPTMatrix
-    (sodp::SecondOrderPerturbation)(H₀::Generator, H₁::Generator, bond::Bond) -> SOPTMatrix
-
-"""
 function (sodp::SecondOrderPerturbation)(H₁::Generator, p₀::Dict{T,<:ProjectState}, qₚ::Dict{T,<:ProjectState}, qₘ::Dict{T,<:ProjectState}, bond::Bond) where T<:AbstractPID  
     left = p₀[bond.spoint.pid]
     right = p₀[bond.epoint.pid]
@@ -499,7 +496,13 @@ function Base.show(io::IO, ps::SOPTMatrix)
     Base.show(io, ps.m₂)
 end
 
+"""
+    Coefficience{P<:AbstractPID, I<:AbstractVector{<:Matrix{<:Number}}} <: Action
+    Coefficience(ob::AbstractVector{<:Matrix{<:Number}}, lattice::AbstractLattice; order::Int=-1, η::Float64=1e-12, dim::Int=2)
+    Coefficience(lattice::AbstractLattice, hilbert::Hilbert, terms::Tuple{Vararg{Term}}, p₀::Dict{<:AbstractPID, <:ProjectState}; η::Float64=1e-12, order::Int=-1, dim::Int=2)
+    Coefficience(observables::Dict{<:AbstractPID, <:AbstractVector{<:Matrix{<:Number}}}; η::Float64=1e-12, order::Int= -1, dim::Int=2)
 
+"""
 struct Coefficience{P<:AbstractPID, I<:AbstractVector{<:Matrix{<:Number}}} <: Action
     observables:: Dict{P, I}
     η:: Float64
@@ -535,7 +538,13 @@ function observables_project(terms::Tuple{Vararg{Term}}, point::Point, hilbert::
     res = map(op->psp.vectors'*Array(matrix(op, psp.basis, table))*psp.vectors, ops)
     return collect(res)
 end
+"""
+    coefficience_project(m₂::Matrix{<:Number}, gsg::AbstractVector{T}, nshape::Tuple{Int,Int}; η::Float64=1e-12) where T<:Matrix{<:Number} -> Matrix
+    coefficience_project(m₂::Matrix{<:Number}, bond::Bond, coeff::Coefficience) -> Matrix
+    coefficience_project(soptm::SOPTMatrix, coeff::Coefficience) -> Matrix
 
+Get the coefficience of exchange interaction.
+"""
 function coefficience_project(m₂::Matrix{<:Number}, gsg::AbstractVector{T}, nshape::Tuple{Int,Int}; η::Float64=1e-12) where T<:Matrix{<:Number} 
     b = m₂[:]
     nn = length(gsg)
@@ -574,8 +583,14 @@ function coefficience_project(soptm::SOPTMatrix, coeff::Coefficience)
         error("coefficience_project error: not support when coeff.order != 1 or 2 or -1")
     end
 end
+
 # only for spin-1/2 case
 using QuantumLattices: SpinCoupling, SpinTerm, Couplings, Spin, rcoord, kind
+"""
+    coefficience_project(sopt::SOPT, coeff::Coefficience; η::Float64=1e-14) -> Generator
+
+Only support the pseudospin-1/2 case.
+"""
 function coefficience_project(sopt::SOPT, coeff::Coefficience; η::Float64=1e-14)
     st, cof = sopt, coeff
     if cof.dim == 2
@@ -600,7 +615,6 @@ function coefficience_project(sopt::SOPT, coeff::Coefficience; η::Float64=1e-14
             j = coefficience_project(soptm, cof)
             j[norm.(j) .< η] .= 0.0 
             j[imag.(j) .< η] = real.(j[imag.(j) .< η])
-            println(bond)
             ex = spincp(j)
             return ex
         end
@@ -611,7 +625,6 @@ function coefficience_project(sopt::SOPT, coeff::Coefficience; η::Float64=1e-14
             symb = Meta.parse("h$(i)b$(bond.neighbor)")
             if kind(bond) ∉ cache
                 push!(terms, SpinTerm(symb, one(ComplexF64), bond.neighbor, spincoupling))
-
                 push!(cache, kind(bond))
             end
         end 
@@ -619,7 +632,11 @@ function coefficience_project(sopt::SOPT, coeff::Coefficience; η::Float64=1e-14
         return Generator(tuple(terms...), Bonds(st.lattice), hilbert; half=false, boundary=plain)
     end
 end
+"""
+    matrix(ops::Operators, ts₁::TargetSpace, ts₂::TargetSpace, table) -> Matrix
 
+Get the matrix of direct sum of submatrices.
+"""
 function matrix(ops::Operators, ts₁::TargetSpace, ts₂::TargetSpace, table)
     return hcat([vcat([matrix2(ops, (bra, ket), table) for bra in ts₁.sectors]...) for ket in ts₂.sectors]...)
 end
