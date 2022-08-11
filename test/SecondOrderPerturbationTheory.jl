@@ -84,13 +84,13 @@ end
     @test eltype(coeff) == Matrix{ComplexF64}
     coeff2 = Coefficience(Matrix{ComplexF64}[σ0,1.0*σx,σy,σz], lattice; η=1e-12, order=-1)
     @test coeff2.observables == coeff.observables
-    s0 = Onsite(:s0, 1.0)
-    sx = Onsite(:sx, 1.0+0im, couplings=σˣ"sp")
-    sy = Onsite(:sx, 1.0+0im, couplings=σʸ"sp")
-    sz = Onsite(:sx, 1.0+0im, couplings=σᶻ"sp")
-    coeff3 = Coefficience(lattice, hilbert, (s0, sx, sy, sz), p₀)
-    @test coeff3.observables == coeff.observables
-    Jcoef3 = coefficience_project(soptmat, coeff3)
-    Jcoef2 = coefficience_project(soptmat, coeff2)
-    @test real.(diag(Jcoef3)) ≈ real.(diag(Jcoef2)) ≈ [-1.25,0.25,0.25,0.25]
+    s0 = Onsite(:s0,1.0)
+    sx=Onsite(:sx,1.0+0im,couplings=σˣ"sp")
+    sy=Onsite(:sx,1.0+0im,couplings=σʸ"sp")
+    sz=Onsite(:sx,1.0+0im,couplings=σᶻ"sp")
+    coeff3 = Coefficience(lattice,hilbert,(s0,sx,sy,sz),p₀)
+    @test coeff3.observables==coeff.observables
+    Jcoef3=coefficience_project(soptmat,coeff3)
+    Jcoef2 = coefficience_project(soptmat,coeff2)
+    @test real.(diag(Jcoef3)) ≈ real.(diag(Jcoef2))≈ [-1.25,0.25,0.25,0.25]
 end
