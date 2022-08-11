@@ -1,7 +1,14 @@
 name = "SecondOrderPerturbationTheory"
-uuid = "8462b829-71c0-4d21-b443-e94185bb4b24"
+uuid = "03d9fef2-6343-4182-b679-65fb479c6bd0"
 authors = ["wwangnju <wwangnju@163.com> and contributors"]
 version = "0.1.0"
+
+[deps]
+ExactDiagonalization = "52dcaa32-6da7-11e9-20ef-755843cf72eb"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+QuantumLattices = "78ae1a1f-1d5d-5174-b61c-66e31b2346dc"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
 julia = "1.6"

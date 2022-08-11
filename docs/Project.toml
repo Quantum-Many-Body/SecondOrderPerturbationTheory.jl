@@ -1,3 +1,6 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-SecondOrderPerturbationTheory = "8462b829-71c0-4d21-b443-e94185bb4b24"
+ExactDiagonalization = "52dcaa32-6da7-11e9-20ef-755843cf72eb"
+QuantumLattices = "78ae1a1f-1d5d-5174-b61c-66e31b2346dc"
+SecondOrderPerturbationTheory = "03d9fef2-6343-4182-b679-65fb479c6bd0"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

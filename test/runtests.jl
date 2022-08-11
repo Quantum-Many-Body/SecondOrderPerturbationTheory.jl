@@ -1,6 +1,6 @@
-using SecondOrderPerturbationTheory
 using Test
+using SafeTestsets
 
 @testset "SecondOrderPerturbationTheory.jl" begin
-    # Write your tests here.
+    include("SecondOrderPerturbationTheory.jl")
 end
