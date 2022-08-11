@@ -53,9 +53,9 @@ uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 
 [[ExactDiagonalization]]
 deps = ["Arpack", "LinearAlgebra", "Printf", "QuantumLattices", "SparseArrays"]
-git-tree-sha1 = "7520b8c2f0c76c8410d278b1cd198f67f865ec5c"
+git-tree-sha1 = "c7efc96076dfccfbdb058b8875fb1d0917738fbe"
 uuid = "52dcaa32-6da7-11e9-20ef-755843cf72eb"
-version = "0.1.2"
+version = "0.1.3"
 
 [[ExprTools]]
 git-tree-sha1 = "56559bbef6ca5ea0c0818fa5c90320398a6fbf8d"
