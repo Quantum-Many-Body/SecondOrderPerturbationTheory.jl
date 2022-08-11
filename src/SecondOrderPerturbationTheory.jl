@@ -581,7 +581,6 @@ function coefficience_project(sopt::SOPT, coeff::Coefficience; η::Float64=1e-14
     if cof.dim == 2
         function spincp(j::Matrix{ComplexF64})
             j = real.(j)
-            println("jjj: ", j)
             jxx, jxy, jxz = j[2,2], j[2,3], j[2,4]
             jyx, jyy, jyz = j[3,2], j[3,3], j[3,4]
             jzx, jzy, jzz = j[4,2], j[4,3], j[4,4]
@@ -603,7 +602,6 @@ function coefficience_project(sopt::SOPT, coeff::Coefficience; η::Float64=1e-14
             j[imag.(j) .< η] = real.(j[imag.(j) .< η])
             println(bond)
             ex = spincp(j)
-            println("")
             return ex
         end
         bonds=[p for p in Bonds(st.lattice) if rank(p)==2]
