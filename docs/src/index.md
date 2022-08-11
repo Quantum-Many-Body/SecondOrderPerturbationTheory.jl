@@ -4,7 +4,7 @@ CurrentModule = SecondOrderPerturbationTheory
 
 # SecondOrderPerturbationTheory
 
-Documentation for [SecondOrderPerturbationTheory](https://github.com/wwangnju/SecondOrderPerturbationTheory.jl).
+Documentation for [SecondOrderPerturbationTheory](https://github.com/Quantum-Many-Body/SecondOrderPerturbationTheory.jl).
 
 ```@index
 ```
