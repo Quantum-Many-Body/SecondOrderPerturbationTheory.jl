@@ -473,7 +473,7 @@ end
 """
     SOPTMatrix(bond::Bond, P₀::ProjectStateBond, m₀::Matrix, m₂::Matrix)
 
-Matrix representation of the low-energy hamiltionian.
+Matrix representation of the low-energy hamiltionian. The order of basis of representation is the order of (space of epoint, space of spoint), i.e. (left space of bond.spoint)⊗(right space of bond.epoint)
 # Arguments
 -`bond`: bond of lattice
 -`P₀`: projected state
@@ -530,7 +530,9 @@ function Coefficience(lattice::AbstractLattice, hilbert::Hilbert, terms::Tuple{V
     return Coefficience(ob; η=η, order=order,dim=dim)
 end
 """
-    observables_project(term::Term, point::Point, hilbert::Hilbert, psp::ProjectState) -> Vector
+    observables_project(terms::Tuple{Vararg{Term}}, point::Point, hilbert::Hilbert, psp::ProjectState) -> Vector
+
+The order of `Term` in terms tuple determines the order of matrix in the result.
 """
 function observables_project(terms::Tuple{Vararg{Term}}, point::Point, hilbert::Hilbert, psp::ProjectState)
     table = Table(point, hilbert, SecondOrderPerturationMetric())
@@ -543,7 +545,7 @@ end
     coefficience_project(m₂::Matrix{<:Number}, bond::Bond, coeff::Coefficience) -> Matrix
     coefficience_project(soptm::SOPTMatrix, coeff::Coefficience) -> Matrix
 
-Get the coefficience of exchange interaction.
+Get the coefficience of exchange interaction. The row index corresponds to bond.spoint, column index corresponds to bond.epoint.
 """
 function coefficience_project(m₂::Matrix{<:Number}, gsg::AbstractVector{T}, nshape::Tuple{Int,Int}; η::Float64=1e-12) where T<:Matrix{<:Number} 
     b = m₂[:]
@@ -580,7 +582,7 @@ function coefficience_project(soptm::SOPTMatrix, coeff::Coefficience)
     elseif coeff.order == 2
         return  coefficience_project(soptm.m₂, soptm.bond, coeff)
     else
-        error("coefficience_project error: not support when coeff.order != 1 or 2 or -1")
+        error("coefficience_project error: not support when coeff.order != 0 or 2 or -1")
     end
 end
 
