@@ -490,9 +490,9 @@ function Base.show(io::IO, ps::SOPTMatrix)
     @printf io "%s: \n" nameof(typeof(ps))
     @printf io "%s= \n" "bond" 
     Base.show(io, ps.bond)
-    @printf io "\n %s= \n" "zeroth order matrix" 
+    @printf io "\n %s= \n" "zeroth order matrix(:m₀)" 
     Base.show(io, ps.m₀)
-    @printf io "\n %s = \n" "second order matrix" 
+    @printf io "\n %s = \n" "second order matrix(:m₂)" 
     Base.show(io, ps.m₂)
 end
 
