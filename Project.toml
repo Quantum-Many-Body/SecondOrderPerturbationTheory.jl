@@ -1,7 +1,7 @@
 name = "SecondOrderPerturbationTheory"
 uuid = "03d9fef2-6343-4182-b679-65fb479c6bd0"
 authors = ["wwangnju <wwangnju@163.com> and contributors"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 ExactDiagonalization = "52dcaa32-6da7-11e9-20ef-755843cf72eb"
@@ -12,5 +12,5 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
 ExactDiagonalization = "0.1"
-QuantumLattices = "0.8"
-julia = "1.6"
+QuantumLattices = "0.9"
+julia = "1.8"

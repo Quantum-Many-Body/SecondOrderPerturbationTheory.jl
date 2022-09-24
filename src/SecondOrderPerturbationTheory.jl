@@ -1,16 +1,13 @@
 module SecondOrderPerturbationTheory
 using Printf: @printf
 using LinearAlgebra: eigen, Hermitian, diagm, ishermitian, pinv, norm
-using ExactDiagonalization: BinaryBasis, BinaryBases, TargetSpace, productable, isone
+using ExactDiagonalization: BinaryBasis, BinaryBases, TargetSpace, productable, isone, count
 using Base.Iterators: product
-using QuantumLattices: Hilbert, AbstractLattice, Generator, Operators, Engine, Term, Boundary, CompositeDict, AbstractPID
-using QuantumLattices: Transformation, Bond, id, expand!, isintracell, AbstractBond, rank, PID, Point
-using QuantumLattices:  OID, Index, Metric, OIDToTuple, plain, Bonds
+using QuantumLattices: Hilbert, AbstractLattice, OperatorGenerator, Operators, Frontend, Term, Boundary, CompositeDict
+using QuantumLattices: Transformation, Bond, id, expand!, isintracell, Neighbors, Point, SpinTerm, Spin, Action
+using QuantumLattices:  CompositeIndex, Index, Metric, OperatorUnitToTuple, plain, bonds, MatrixCoupling, SID
 import QuantumLattices: dimension, ⊗, ⊕, matrix, expand, Table
 
-using ExactDiagonalization: isone, one, zero, count, Operator, Operators, creation
-using QuantumLattices: statistics, Action
-using SparseArrays: SparseMatrixCSC, spzeros
 
 export ⊠, ProjectState, ProjectStateBond, BinaryConfigure, PickState, SecondOrderPerturbation
 export SOPT, SOPTMatrix, high_configure, hamiltonianeff, projectstate_points, SecondOrderPerturationMetric 
@@ -23,10 +20,10 @@ Get the direct product of two sets of binary bases, and the permutation vector.
 function ⊠(bs₁::BinaryBases, bs₂::BinaryBases)
     @assert productable(bs₁, bs₂) "⊠ error: the input two sets of bases cannot be direct producted."
     table = Vector{promote_type(eltype(bs₁), eltype(bs₂))}(undef, dimension(bs₁)*dimension(bs₂))
-    count = 1
+    count₀ = 1
     for (b₁, b₂) in product(bs₁, bs₂)
-        table[count] = b₁⊗b₂
-        count += 1
+        table[count₀] = b₁⊗b₂
+        count₀ += 1
     end
     p = sortperm(table)
     return BinaryBases(sort!([bs₁.id; bs₂.id]; by=first), table[p]), p
@@ -67,7 +64,7 @@ struct ProjectState{V<:Real, C<:Number, P<:TargetSpace}
     end
 end
 Base.eltype(ps::ProjectState) = eltype(typeof(ps))
-Base.eltype(::Type{ProjectState{V,C,P}}) where {V<:Real, C<:Number, P<:TargetSpace} = C
+Base.eltype(::Type{ProjectState{V, C, P}}) where {V<:Real, C<:Number, P<:TargetSpace} = C
 """
     dimension(ps::ProjectState) -> Int
 
@@ -79,17 +76,17 @@ The dimension of local low-energy hilbert space.
 
 The dimension of target space `basis`.
 """
-@inline dimension(ps::ProjectState,::Type{T}) where T<:TargetSpace = sum(dimension.(ps.basis.sectors))
+@inline dimension(ps::ProjectState, ::Type{T}) where T<:TargetSpace = sum(dimension.(ps.basis.sectors))
 
 @inline function (Base.:*)(ps::ProjectState, u::Matrix{<:Number}) 
     @assert size(u, 1) == size(ps.vectors, 2) ":* error: dimensions of unitary matrix and eigenvectors donot match each other."
     return ProjectState(ps.values, ps.vectors*u, ps.basis) 
 end
 @inline (Base.:*)(u::Matrix{<:Number}, ps::ProjectState) = ps*u
-function Base.convert(::Type{ProjectState{V,C,P}}, ps::ProjectState{V1,C1,P}) where {V1<:Real,C1<:Number, V<:Real,C<:Number,P<:TargetSpace}
-    val = map(x->convert(V,x), ps.values)
+function Base.convert(::Type{ProjectState{V, C, P}}, ps::ProjectState{V1, C1, P}) where {V1<:Real,C1<:Number, V<:Real, C<:Number, P<:TargetSpace}
+    val = map(x->convert(V, x), ps.values)
     vec = C.(ps.vectors)
-    return ProjectState(val,vec,ps.basis)
+    return ProjectState(val, vec, ps.basis)
 end
 function Base.show(io::IO, ps::ProjectState)
     @printf io "%s(%s)=" ":values" typeof(ps.values)
@@ -130,12 +127,12 @@ function ⊗(ps₁::ProjectState, ps₂::ProjectState)
     end
     bs = []
     p = Int[]
-    count = 0
+    count₀ = 0
     for (bs₁, bs₂) in product(ps₁.basis.sectors, ps₂.basis.sectors) 
         bs₀, p₀ = bs₁⊠bs₂
         push!(bs, bs₀)
-        append!(p, p₀ .+ count)
-        count += length(p₀)
+        append!(p, p₀ .+ count₀)
+        count₀ += length(p₀)
     end
     basis = TargetSpace(bs...)
     vectors = (Base.kron(ps₂.vectors, ps₁.vectors))[p, :]
@@ -154,14 +151,14 @@ end
     ProjectState(ops::Operators, braket::BinaryBases, table; pick::Union{UnitRange{Int}, Vector{Int}, Colon}=:)
     ProjectState(ops::Operators, ts::TargetSpace, table, pick::Vector{Vector{Int}})
 
-Construct `ProjectState`.
+Construct `ProjectState`. The pick::Union{UnitRange{Int}, Vector{Int}, Colon} argument picks the low-energy states. The i-th element of arguement pick vector is the loaction of low-energy states in the i-th `Sector` of `TargetSpace`.
 """
 function ProjectState(ops::Operators, braket::BinaryBases, table; pick::Union{UnitRange{Int}, Vector{Int}, Colon}=:)
     hm = matrix(ops, (braket, braket), table)
     hm2 = Hermitian(Array(hm+hm')/2)
     F = eigen(hm2)
     basis = TargetSpace(braket)
-    return ProjectState(F.values[pick], F.vectors[:,pick], basis)
+    return ProjectState(F.values[pick], F.vectors[:, pick], basis)
 end
 function ProjectState(ops::Operators, ts::TargetSpace, table, pick::Vector{Vector{Int}})
     res = []
@@ -175,7 +172,7 @@ end
 """
     ProjectStateBond(left::ProjectState, right::ProjectState)
 
-Construct `ProjectStateBond`.
+Projected states on a bond. Construct `ProjectStateBond` by the two `ProjectState`s defined on point.
 """
 struct ProjectStateBond
     left::ProjectState
@@ -205,63 +202,63 @@ function Base.show(io::IO, ps::ProjectStateBond)
     @printf io "\n %s = %s" "both ProjectState" "left⊗right"
 end
 """
-    BinaryConfigure{I<:TargetSpace, P<:AbstractPID} <: CompositeDict{P, I}
+    BinaryConfigure{I<:TargetSpace, P<:Int} <: CompositeDict{P, I}
     BinaryConfigure(ps::Pair...)
     BinaryConfigure(kv)
 
 Construct `BinaryConfigure` at a lattice. The local binary configure is given by `BinaryConfigure`.
 """
-struct BinaryConfigure{I<:TargetSpace, P<:AbstractPID} <: CompositeDict{P, I}
+struct BinaryConfigure{I<:TargetSpace, P<:Int} <: CompositeDict{P, I}
     contents::Dict{P, I}
 end
 BinaryConfigure(ps::Pair...) = BinaryConfigure(ps)
 function BinaryConfigure(kv)
     contents = Dict(kv)
-    return BinaryConfigure{valtype(contents),keytype(contents)}(contents)
+    return BinaryConfigure{valtype(contents), keytype(contents)}(contents)
 end
 
 """
-    PickState{I<:Vector{Vector{Int}}, P<:AbstractPID} <: CompositeDict{P, I}
+    PickState{I<:Vector{Vector{Int}}, P<:Int} <: CompositeDict{P, I}
     PickState(ps::Pair...)
     PickState(kv) 
 
 Construct  `PickState`. Pick low-energy states at a lattice.
 """
-struct PickState{I<:Vector{Vector{Int}}, P<:AbstractPID} <: CompositeDict{P, I}
+struct PickState{I<:Vector{Vector{Int}}, P<:Int} <: CompositeDict{P, I}
     contents::Dict{P, I}
 end
 PickState(ps::Pair...) = PickState(ps)
 function PickState(kv)
     contents = Dict(kv)
-    return PickState{valtype(contents),keytype(contents)}(contents)
+    return PickState{valtype(contents), keytype(contents)}(contents)
 end
 
 
 #SecondOrderPerturtation
 struct SecondOrderPerturationMetric <: Metric end
-(m::SecondOrderPerturationMetric)(oid::OID) = (oid.rcoord, oid.index.pid.site, oid.index.iid.spin, oid.index.iid.orbital)
-(m::SecondOrderPerturationMetric)(::Type{Point}) = OIDToTuple(:spin, :orbital)
-function Table(bond::AbstractBond, hilbert::Hilbert, m::SecondOrderPerturationMetric)
-    if bond|>rank == 2
-        pid₁, pid₂ = bond.spoint.pid, bond.epoint.pid
+(m::SecondOrderPerturationMetric)(oid::CompositeIndex) = (oid.rcoordinate, oid.index.site, oid.index.iid.spin, oid.index.iid.orbital)
+(m::SecondOrderPerturationMetric)(::Type{Point}) = OperatorUnitToTuple(:spin, :orbital)
+function Table(bond::Bond, hilbert::Hilbert, m::SecondOrderPerturationMetric)
+    if bond|>length == 2
+        pid₁, pid₂ = bond[1].site, bond[2].site
         int₁, int₂ = hilbert[pid₁], hilbert[pid₂]
-        oids₁ = [OID(Index(pid₁, iid), bond.spoint.rcoord, bond.spoint.icoord) for iid in int₁]
-        oids₂ = [OID(Index(pid₂, iid), bond.epoint.rcoord, bond.epoint.icoord) for iid in int₂]
+        oids₁ = [CompositeIndex(Index(pid₁, iid), bond[1].rcoordinate, bond[1].icoordinate) for iid in int₁]
+        oids₂ = [CompositeIndex(Index(pid₂, iid), bond[2].rcoordinate, bond[2].icoordinate) for iid in int₂]
         return Table([oids₁; oids₂], m)
-    elseif rank(bond) == 1
-        pid = bond.pid
+    elseif length(bond) == 1
+        pid = bond[1].site
         int = hilbert[pid]
-        oid = [OID(Index(pid, iid), bond.rcoord, bond.icoord) for iid in int]
+        oid = [CompositeIndex(Index(pid, iid), bond[1].rcoordinate, bond[1].icoordinate) for iid in int]
         return Table(oid, m(Point))
     else
-        error("not support for rank(bond) >2")
+        error("not support for length(bond) > 2")
     end
 end
 
 """
     SecondOrderPerturbation{B<:BinaryConfigure, L<:PickState} <: Transformation
-    (::SecondOrderPerturbation)(H₁::Generator, p₀::Dict{T,<:ProjectState}, qₚ::Dict{T,<:ProjectState}, qₘ::Dict{T,<:ProjectState}, bond::Bond) where T<:AbstractPID  -> SOPTMatrix
-    (::SecondOrderPerturbation)(H₀::Generator, H₁::Generator, bond::Bond) -> SOPTMatrix
+    (::SecondOrderPerturbation)(H₁::OperatorGenerator, p₀::Dict{T,<:ProjectState}, qₚ::Dict{T,<:ProjectState}, qₘ::Dict{T,<:ProjectState}, bond::Bond) where T<:Int  -> SOPTMatrix
+    (::SecondOrderPerturbation)(H₀::OperatorGenerator, H₁::OperatorGenerator, bond::Bond) -> SOPTMatrix
 
 A type.
 """
@@ -272,78 +269,78 @@ struct SecondOrderPerturbation{B<:BinaryConfigure, L<:PickState} <: Transformati
         new{typeof(bc), typeof(ls)}(bc, ls)
     end
 end
-function (sodp::SecondOrderPerturbation)(H₁::Generator, p₀::Dict{T,<:ProjectState}, qₚ::Dict{T,<:ProjectState}, qₘ::Dict{T,<:ProjectState}, bond::Bond) where T<:AbstractPID  
-    left = p₀[bond.spoint.pid]
-    right = p₀[bond.epoint.pid]
-    nleft, nright = (bond.spoint.rcoord, bond.spoint.pid.site) > (bond.epoint.rcoord, bond.epoint.pid.site) ? (dimension(right, typeof(right.basis)), 0) : (0, dimension(left, typeof(left.basis)))
+function (sodp::SecondOrderPerturbation)(H₁::OperatorGenerator, p₀::Dict{T,<:ProjectState}, qₚ::Dict{T,<:ProjectState}, qₘ::Dict{T,<:ProjectState}, bond::Bond) where T<:Int  
+    left = p₀[bond[1].site]
+    right = p₀[bond[2].site]
+    nleft, nright = (bond[1].rcoordinate, bond[1].site) > (bond[2].rcoordinate, bond[2].site) ? (dimension(right, typeof(right.basis)), 0) : (0, dimension(left, typeof(left.basis)))
     p = ProjectStateBond(left, right, nleft, nright)
-    q₁ = ⊗((qₚ[bond.spoint.pid])<<nleft, (qₘ[bond.epoint.pid])<<nright)
-    q₂ = ⊗((qₘ[bond.spoint.pid])<<nleft, (qₚ[bond.epoint.pid])<<nright)
+    q₁ = ⊗((qₚ[bond[1].site])<<nleft, (qₘ[bond[2].site])<<nright)
+    q₂ = ⊗((qₘ[bond[1].site])<<nleft, (qₚ[bond[2].site])<<nright)
     q = q₁⊕q₂
     opts = expand(H₁, bond)
     table = Table(bond, H₁.hilbert, SecondOrderPerturationMetric())
     m₀, m₂ = hamiltonianeff(p.both, q, opts, table) 
     return SOPTMatrix(bond, p, m₀, m₂)
 end
-function (sodp::SecondOrderPerturbation)(H₀::Generator, H₁::Generator, bond::Bond)
-    points = [bond.spoint, bond.epoint]
+function (sodp::SecondOrderPerturbation)(H₀::OperatorGenerator, H₁::OperatorGenerator, bond::Bond)
+    points = collect(bond)
     p₀, qₚ, qₘ = projectstate_points(sodp.binaryconfigure, sodp.pickstate, H₀, points) 
     return sodp(H₁, p₀, qₚ, qₘ, bond)
 end
 """
-    expand(gen::Generator, bond::AbstractBond) -> Operators
+    expand(gen::OperatorGenerator, bond::Bond) -> Operators
 """
-function expand(gen::Generator, bond::AbstractBond)
+function expand(gen::OperatorGenerator, bond::Bond)
     result = zero(valtype(gen))
-    map(term->expand!(result, term, bond, gen.hilbert, half=gen.half, table=gen.table), gen.terms)
+    map(term->expand!(result, term, bond, gen.hilbert; half=gen.half), gen.terms)
     isintracell(bond) || for opt in result
         result[id(opt)] = gen.operators.boundary(opt)
     end
     return result
 end
 """
-    projectstate_points(bc::BinaryConfigure, ls::PickState, H₀::Generator) -> Tuple{Dict{PID,ProjectState},Dict{PID,ProjectState}, Dict{PID,ProjectState}}
-    projectstate_points(bc::BinaryConfigure, ls::PickState, H₀::Generator, points::AbstractVector{<:Point}) -> Tuple{Dict{PID,ProjectState},Dict{PID,ProjectState}, Dict{PID,ProjectState}}
+    projectstate_points(bc::BinaryConfigure, ls::PickState, H₀::OperatorGenerator) -> Tuple{Dict{Int, ProjectState}, Dict{Int, ProjectState}, Dict{Int, ProjectState}}
+    projectstate_points(bc::BinaryConfigure, ls::PickState, H₀::OperatorGenerator, points::AbstractVector{<:Point}) -> Tuple{Dict{Int, ProjectState}, Dict{Int, ProjectState}, Dict{Int, ProjectState}}
 
 Construct the `ProjectState`` type of low-energy states within N-particle space, high-energy states with (N+1)-particle space, and high-energy states with (N-1)-particle space.
 """
-function projectstate_points(bc::BinaryConfigure, ls::PickState, H₀::Generator)
-    points = [ p for p in H₀.bonds if rank(p) == 1]
+function projectstate_points(bc::BinaryConfigure, ls::PickState, H₀::OperatorGenerator)
+    points = [ p[1] for p in H₀.bonds if length(p) == 1]
     return projectstate_points(bc, ls, H₀, points)
 end
-function projectstate_points(bc::BinaryConfigure, ls::PickState, H₀::Generator, points::AbstractVector{<:Point}) 
+function projectstate_points(bc::BinaryConfigure, ls::PickState, H₀::OperatorGenerator, points::AbstractVector{<:Point}) 
     pp₀, ppₚ, ppₘ = [], [], []
     dtype = Float64
     for point in points
-        table = Table(point, H₀.hilbert, SecondOrderPerturationMetric())
+        table = Table(Bond(point), H₀.hilbert, SecondOrderPerturationMetric())
         p₀, pₚ, pₘ =  _projectstate_points(bc, ls, H₀, point, table)
-        push!(pp₀, point.pid=>p₀)
-        push!(ppₚ, point.pid=>pₚ)
-        push!(ppₘ, point.pid=>pₘ)
+        push!(pp₀, point.site=>p₀)
+        push!(ppₚ, point.site=>pₚ)
+        push!(ppₘ, point.site=>pₘ)
         dtype = promote_type(eltype(p₀), dtype, eltype(pₚ), eltype(pₘ))
     end
-   T = ProjectState{Float64, dtype,valtype(bc)}
+    T = ProjectState{Float64, dtype, valtype(bc)}
     psp, psqₚ, psqₘ = Dict{keytype(bc),T}(pp₀), Dict{keytype(bc),T}(ppₚ), Dict{keytype(bc),T}(ppₘ)
     return psp, psqₚ, psqₘ 
 end
-function _projectstate_points(bc::BinaryConfigure, ls::PickState, H₀::Generator, point::Point, table::Table)
-        tsₚ, tsₘ, pcₚ, pcₘ = _high_configure(bc, ls, point.pid)
-        opts = expand(H₀, point)
-        pick = ls[point.pid]
-        ts = bc[point.pid]
+function _projectstate_points(bc::BinaryConfigure, ls::PickState, H₀::OperatorGenerator, point::Point, table::Table)
+        tsₚ, tsₘ, pcₚ, pcₘ = _high_configure(bc, ls, point.site)
+        opts = expand(H₀, Bond(point))
+        pick = ls[point.site]
+        ts = bc[point.site]
         p = ProjectState(opts, ts, table, pick)
         qₚ = ProjectState(opts, tsₚ, table, pcₚ)
-        qₘ= ProjectState(opts, tsₘ, table, pcₘ) 
+        qₘ = ProjectState(opts, tsₘ, table, pcₘ) 
     return p, qₚ, qₘ
 end
 """
     high_configure(bc::BinaryConfigure, ls::PickState) -> Tuple
-    high_configure(bc::BinaryConfigure, ls::PickState, pids::AbstractVector{PID}) -> Tuple
+    high_configure(bc::BinaryConfigure, ls::PickState, pids::AbstractVector{Int}) -> Tuple
 
 Get the high-energy configure of local space.
 """
 high_configure(bc::BinaryConfigure, ls::PickState) = high_configure(bc, ls, collect(keys(bc)))
-function high_configure(bc::BinaryConfigure, ls::PickState, pids::AbstractVector{<:AbstractPID})
+function high_configure(bc::BinaryConfigure, ls::PickState, pids::AbstractVector{<:Int})
     bc₁, bc₂, ls₁, ls₂ = Dict(), Dict(), Dict(), Dict()
     for key in pids
         tsₚ, tsₘ, pcₚ, pcₘ = _high_configure(bc, ls, key)
@@ -351,7 +348,7 @@ function high_configure(bc::BinaryConfigure, ls::PickState, pids::AbstractVector
     end
     return bc₁, bc₂, ls₁, ls₂ 
 end
-function _high_configure(bc::BinaryConfigure, ls::PickState, pid::AbstractPID)
+function _high_configure(bc::BinaryConfigure, ls::PickState, pid::Int)
         key = pid
         plus = []
         minus = []
@@ -382,7 +379,7 @@ end
     return res 
 end
 """  
-    hamiltonianeff(psp::ProjectState, psq::ProjectState, h1::Operators, table::Table)  ->Tuple{Matrix,Matrix}
+    hamiltonianeff(psp::ProjectState, psq::ProjectState, h1::Operators, table::Table)  ->Tuple{Matrix, Matrix}
 
 Get the effective Hamiltonian, the first and second terms of the result correspond to the zero-th and 2nd perturbations respectively.
 """
@@ -392,7 +389,7 @@ function hamiltonianeff(psp::ProjectState, psq::ProjectState, h1::Operators, tab
     m₀ = heff0 + heff01
     @assert ishermitian(m₀) "hamiltonianeff error: the zero-th perturbations matrix should be hermitian."
     tqp = psq.vectors'*Array(matrix(h1, psq.basis, psp.basis, table))*psp.vectors
-    m, n = size(psp.vectors,2), size(psq.vectors,2)
+    m, n = size(psp.vectors, 2), size(psq.vectors, 2)
     sqp = zeros(eltype(psp.vectors), n, m)
     for i = 1:m
         for j = 1:n
@@ -407,27 +404,28 @@ function hamiltonianeff(psp::ProjectState, psq::ProjectState, h1::Operators, tab
 end
 
 """
-    SOPT{L<:AbstractLattice, G₁<:Generator, G₀<:Generator, PT<:SecondOrderPerturbation} <: Engine
+    SOPT{L<:AbstractLattice, G₁<:OperatorGenerator, G₀<:OperatorGenerator, PT<:SecondOrderPerturbation} <: Frontend
 
 Second order perturbation theory method of a electronic quantum lattice system.
 """
-struct SOPT{L<:AbstractLattice, G₁<:Generator, G₀<:Generator, PT<:SecondOrderPerturbation} <: Engine
+struct SOPT{L<:AbstractLattice, G₁<:OperatorGenerator, G₀<:OperatorGenerator, PT<:SecondOrderPerturbation} <: Frontend
     lattice::L
     H₁::G₁
     H₀::G₀
     configure::PT
-    function SOPT(lattice::AbstractLattice, H₁::Generator, H₀::Generator, configure::SecondOrderPerturbation) 
+    function SOPT(lattice::AbstractLattice, H₁::OperatorGenerator, H₀::OperatorGenerator, configure::SecondOrderPerturbation) 
         new{typeof(lattice), typeof(H₁), typeof(H₀), typeof(configure)}(lattice, H₁, H₀, configure)
     end
 end
 """
-    SOPT(lattice::AbstractLattice, hilbert::Hilbert, terms₁::Tuple{Vararg{Term}}, terms₀::Tuple{Vararg{Term}}, binaryconfigure::BinaryConfigure, lowstate::PickState; boundary::Boundary=plain)
+    SOPT(lattice::AbstractLattice, hilbert::Hilbert, terms₁::Tuple{Vararg{Term}}, terms₀::Tuple{Vararg{Term}}, binaryconfigure::BinaryConfigure, lowstate::PickState; neighbors::Union{Nothing, Int, Neighbors}=nothing, boundary::Boundary=plain)
 
 Construct the second order perturbation method for a quantum lattice system.
 """
-function SOPT(lattice::AbstractLattice, hilbert::Hilbert, terms₁::Tuple{Vararg{Term}}, terms₀::Tuple{Vararg{Term}}, binaryconfigure::BinaryConfigure, lowstate::PickState; boundary::Boundary=plain)
-    H₁ = Generator(terms₁, Bonds(lattice), hilbert; half=false, boundary=boundary)
-    H₀ = Generator(terms₀, Bonds(lattice), hilbert; half=false, boundary=boundary)
+function SOPT(lattice::AbstractLattice, hilbert::Hilbert, terms₁::Tuple{Vararg{Term}}, terms₀::Tuple{Vararg{Term}}, binaryconfigure::BinaryConfigure, lowstate::PickState; neighbors::Union{Nothing, Int, Neighbors}=nothing, boundary::Boundary=plain)
+    isnothing(neighbors) && (neighbors = maximum(terms₁->terms₁.bondkind, terms₁))
+    H₁ = OperatorGenerator(terms₁, bonds(lattice, neighbors), hilbert; half=false, boundary=boundary)
+    H₀ = OperatorGenerator(terms₀, bonds(lattice, 0), hilbert; half=false, boundary=boundary)
     configure = SecondOrderPerturbation(binaryconfigure, lowstate)
     return SOPT(lattice, H₁, H₀, configure)
 end
@@ -453,14 +451,14 @@ function matrix(sopt::SOPT)
     bc, ls = sopt.configure.binaryconfigure, sopt.configure.pickstate
     p₀, qₚ, qₘ = projectstate_points(bc, ls, sopt.H₀) 
     res = []
-    bonds = [ b for b in sopt.H₁.bonds if rank(b)==2]
+    bonds = [ b for b in sopt.H₁.bonds if length(b)==2]
     for bond in bonds
         push!(res, (sopt.configure)(sopt.H₁, p₀, qₚ, qₘ, bond))
     end
     return res
 end
 """
-    projectstate_points(sopt::SOPT) -> Tuple{Dict{PID, ProjectState},Dict{PID, ProjectState},Dict{PID, ProjectState}}
+    projectstate_points(sopt::SOPT) -> Tuple{Dict{Int, ProjectState}, Dict{Int, ProjectState}, Dict{Int, ProjectState}}
 
 Construct `ProjectState` on all points.
 """
@@ -473,7 +471,7 @@ end
 """
     SOPTMatrix(bond::Bond, P₀::ProjectStateBond, m₀::Matrix, m₂::Matrix)
 
-Matrix representation of the low-energy hamiltionian. The order of basis of representation is the order of (space of epoint, space of spoint), i.e. (left space of bond.spoint)⊗(right space of bond.epoint)
+Matrix representation of the low-energy hamiltionian. The order of basis of representation is the order of (space of bond[2], space of bond[1]), i.e. (left space of bond[1])⊗(right space of bond[2])
 # Arguments
 -`bond`: bond of lattice
 -`P₀`: projected state
@@ -497,46 +495,47 @@ function Base.show(io::IO, ps::SOPTMatrix)
 end
 
 """
-    Coefficience{P<:AbstractPID, I<:AbstractVector{<:Matrix{<:Number}}} <: Action
-    Coefficience(ob::AbstractVector{<:Matrix{<:Number}}, lattice::AbstractLattice; order::Int=-1, η::Float64=1e-12, dim::Int=2)
-    Coefficience(lattice::AbstractLattice, hilbert::Hilbert, terms::Tuple{Vararg{Term}}, p₀::Dict{<:AbstractPID, <:ProjectState}; η::Float64=1e-12, order::Int=-1, dim::Int=2)
-    Coefficience(observables::Dict{<:AbstractPID, <:AbstractVector{<:Matrix{<:Number}}}; η::Float64=1e-12, order::Int= -1, dim::Int=2)
+    Coefficience{P<:Int, I<:AbstractVector{<:Matrix{<:Number}}} <: Action
+    Coefficience(ob::AbstractVector{<:Matrix{<:Number}}, lattice::AbstractLattice; order::Int=-1, η::Float64=1e-12)
+    Coefficience(lattice::AbstractLattice, hilbert::Hilbert, terms::Tuple{Vararg{Term}}, p₀::Dict{<:Int, <:ProjectState}; η::Float64=1e-12, order::Int=-1)
+    Coefficience(observables::Dict{<:Int, <:AbstractVector{<:Matrix{<:Number}}}; η::Float64=1e-12, order::Int= -1)
 
+The `observables` attribute is a Dict{<:Int, <: AbstractVector{<:Matrix{<:Number}}}. `η` attribute is truncation of completeness of physical quantities. `order` attribute choose the order of matrix of effective hamiltonian to obtain the exchange coefficiences. 
 """
-struct Coefficience{P<:AbstractPID, I<:AbstractVector{<:Matrix{<:Number}}} <: Action
+struct Coefficience{P<:Int, I<:AbstractVector{<:Matrix{<:Number}}} <: Action
     observables:: Dict{P, I}
     η:: Float64
     order::Int
-    dim::Int
-    function Coefficience(observables::Dict{P,I}, η::Float64, order::Int, dim::Int ) where {P<:AbstractPID, I<:AbstractVector{<:Matrix{<:Number}}}
-        new{keytype(observables),valtype(observables)}(observables, η, order, dim)
+    # dim::Int
+    function Coefficience(observables::Dict{P,I}, η::Float64, order::Int) where {P<:Int, I<:AbstractVector{<:Matrix{<:Number}}}
+        new{keytype(observables),valtype(observables)}(observables, η, order)
     end
 end
-@inline Coefficience(observables::Dict{<:AbstractPID, <:AbstractVector{<:Matrix{<:Number}}}; η::Float64=1e-12, order::Int= -1, dim::Int=2) = Coefficience(observables, η, order, dim) 
-@inline function Coefficience(ob::AbstractVector{<:Matrix{<:Number}}, lattice::AbstractLattice; order::Int=-1, η::Float64=1e-12, dim::Int=2)
-    coeff = Dict{PID,typeof(ob)}()
-    for pid in lattice.pids
+@inline Coefficience(observables::Dict{<:Int, <:AbstractVector{<:Matrix{<:Number}}}; η::Float64=1e-12, order::Int= -1) = Coefficience(observables, η, order) 
+@inline function Coefficience(ob::AbstractVector{<:Matrix{<:Number}}, lattice::AbstractLattice; order::Int=-1, η::Float64=1e-12)
+    coeff = Dict{Int, typeof(ob)}()
+    for pid in 1:length(lattice)
         coeff[pid] = ob 
     end 
-    return Coefficience(coeff; η=η, order=order, dim=dim)
+    return Coefficience(coeff; η=η, order=order)
 end
 Base.eltype(coeff::Coefficience) = eltype(valtype(coeff.observables))
-function Coefficience(lattice::AbstractLattice, hilbert::Hilbert, terms::Tuple{Vararg{Term}}, p₀::Dict{<:AbstractPID, <:ProjectState}; η::Float64=1e-12, order::Int=-1, dim::Int=2)
-    points = [ p for p in Bonds(lattice) if rank(p) == 1]
+function Coefficience(lattice::AbstractLattice, hilbert::Hilbert, terms::Tuple{Vararg{Term}}, p₀::Dict{<:Int, <:ProjectState}; η::Float64=1e-12, order::Int=-1)
+    bpoints = bonds(lattice, 0) 
     ob = Dict{keytype(p₀), Vector{Matrix{ComplexF64}}}()
-    for point in points 
-        ob[point.pid] = observables_project(terms, point, hilbert, p₀[point.pid])
+    for point in bpoints 
+        ob[point[1].site] = observables_project(terms, point[1], hilbert, p₀[point[1].site])
     end
-    return Coefficience(ob; η=η, order=order,dim=dim)
+    return Coefficience(ob; η=η, order=order)
 end
 """
     observables_project(terms::Tuple{Vararg{Term}}, point::Point, hilbert::Hilbert, psp::ProjectState) -> Vector
 
-The order of `Term` in terms tuple determines the order of matrix in the result.
+The order of `Term` in terms (Onsite) tuple determines the order of matrix in the result.
 """
 function observables_project(terms::Tuple{Vararg{Term}}, point::Point, hilbert::Hilbert, psp::ProjectState)
-    table = Table(point, hilbert, SecondOrderPerturationMetric())
-    ops = map(term->expand(term, point, hilbert; half=false), terms)
+    table = Table(Bond(point), hilbert, SecondOrderPerturationMetric())
+    ops = map(term->expand(term, Bond(point), hilbert; half=false), terms)
     res = map(op->psp.vectors'*Array(matrix(op, psp.basis, table))*psp.vectors, ops)
     return collect(res)
 end
@@ -545,23 +544,23 @@ end
     coefficience_project(m₂::Matrix{<:Number}, bond::Bond, coeff::Coefficience) -> Matrix
     coefficience_project(soptm::SOPTMatrix, coeff::Coefficience) -> Matrix
 
-Get the coefficience of exchange interaction. The row index corresponds to bond.spoint, column index corresponds to bond.epoint.
+Get the coefficience of exchange interaction. The row index corresponds to bond[1], column index corresponds to bond[2].
 """
-function coefficience_project(m₂::Matrix{<:Number}, gsg::AbstractVector{T}, nshape::Tuple{Int,Int}; η::Float64=1e-12) where T<:Matrix{<:Number} 
+function coefficience_project(m₂::Matrix{<:Number}, gsg::AbstractVector{T}, nshape::Tuple{Int, Int}; η::Float64=1e-12) where T<:Matrix{<:Number} 
     b = m₂[:]
     nn = length(gsg)
     @assert length(b) == size(gsg[1])|>prod "coefficience error: length(m₂) [$(length(m₂))] == the number of element of matrix of gsg [$(prod(size(gsg[1])))]."
     a = zeros(eltype(eltype(gsg)), nn, nn)
     for i = 1:nn
-        a[:,i] = gsg[i][:]
+        a[:, i] = gsg[i][:]
     end
     res = pinv(a)*b
     data = norm(b - a*res)
-    data >= η &&  @warn "coefficience warning: the physical observables is not enough ($(data)>η(=$(η)))."
+    data >= η &&  @warn "coefficience warning: the number of physical observables is not enough ($(data)>η(=$(η)))."
     return reshape(res, nshape)
 end
 function coefficience_project(m₂::Matrix{<:Number}, bond::Bond, coeff::Coefficience)
-    pids = [bond.spoint.pid, bond.epoint.pid]
+    pids = [bond[1].site, bond[2].site]
     gsg = eltype(coeff)[]
     n₁ = length(coeff.observables[pids[1]])
     n₂ = length(coeff.observables[pids[2]])
@@ -576,7 +575,7 @@ function coefficience_project(m₂::Matrix{<:Number}, bond::Bond, coeff::Coeffic
 end
 function coefficience_project(soptm::SOPTMatrix, coeff::Coefficience)
     if coeff.order < 0
-       return coefficience_project(soptm.m₂+soptm.m₀, soptm.bond, coeff) 
+       return coefficience_project(soptm.m₂ + soptm.m₀, soptm.bond, coeff) 
     elseif coeff.order == 0
         return  coefficience_project(soptm.m₀, soptm.bond, coeff)
     elseif coeff.order == 2
@@ -587,32 +586,26 @@ function coefficience_project(soptm::SOPTMatrix, coeff::Coefficience)
 end
 
 # only for spin-1/2 case
-using QuantumLattices: SpinCoupling, SpinTerm, Couplings, Spin, rcoord, kind
-"""
-    coefficience_project(sopt::SOPT, coeff::Coefficience; η::Float64=1e-14) -> Generator
 
-Only support the pseudospin-1/2 case.
 """
-function coefficience_project(sopt::SOPT, coeff::Coefficience; η::Float64=1e-14)
-    st, cof = sopt, coeff
-    if cof.dim == 2
-        function spincp(j::Matrix{ComplexF64})
-            j = real.(j)
-            jxx, jxy, jxz = j[2,2], j[2,3], j[2,4]
-            jyx, jyy, jyz = j[3,2], j[3,3], j[3,4]
-            jzx, jzy, jzz = j[4,2], j[4,3], j[4,4]
-            return (Couplings(SpinCoupling(jxx,('x','x')),
-                SpinCoupling(jxy,('x','y')),
-                SpinCoupling(jxz,('x','z')),
-                SpinCoupling(jyx,('y','x')),
-                SpinCoupling(jyy,('y','y')),
-                SpinCoupling(jyz,('y','z')),
-                SpinCoupling(jzx,('z','x')),
-                SpinCoupling(jzy,('z','y')),
-                SpinCoupling(jzz,('z','z'))
-                ))
+    coefficience_project(st::SOPT, cof::Coefficience; η::Float64=1e-14) -> OperatorGenerator
+
+Only support the pseudospin-1/2 case. The zeeman term is ommited when the ground states are not Krameter states.
+"""
+function coefficience_project(st::SOPT, cof::Coefficience; η::Float64=1e-14)
+    # st, cof = sopt, coeff
+    flag = true
+    for value in values(cof.observables)
+        for mat in value
+            size(mat) == (2, 2) || (flag = false)
         end
-        function spincoupling(bond)
+    end
+    if flag
+        function spincp(j::Matrix{ComplexF64})
+            j₀ = real.(j)
+            return MatrixCoupling((1, 2), SID, j₀[2:4, 2:4])
+        end
+        function spincoupling(bond::Bond)
             soptm = matrix(st, bond )
             j = coefficience_project(soptm, cof)
             j[norm.(j) .< η] .= 0.0 
@@ -620,67 +613,30 @@ function coefficience_project(sopt::SOPT, coeff::Coefficience; η::Float64=1e-14
             ex = spincp(j)
             return ex
         end
-        bonds=[p for p in Bonds(st.lattice) if rank(p)==2]
+        bonds = [p for p in st.H₁.bonds if length(p)==2]
         terms = []
         cache = Set()
         for (i, bond) in enumerate(bonds)
-            symb = Meta.parse("h$(i)b$(bond.neighbor)")
-            if kind(bond) ∉ cache
-                push!(terms, SpinTerm(symb, one(ComplexF64), bond.neighbor, spincoupling))
-                push!(cache, kind(bond))
+            symb = Meta.parse("h$(i)b$(bond.kind)")
+            if bond.kind ∉ cache
+                push!(terms, SpinTerm(symb, one(ComplexF64), bond.kind, spincoupling))
+                push!(cache, bond.kind)
             end
         end 
-        hilbert = Hilbert(pid=>Spin{1//2}(norbital=1) for pid in st.lattice.pids)
-        return Generator(tuple(terms...), Bonds(st.lattice), hilbert; half=false, boundary=plain)
+        hilbert = Hilbert(pid=>Spin{1//2}() for pid in 1:length(st.lattice))
+        return OperatorGenerator(tuple(terms...), st.H₁.bonds, hilbert; half=false, boundary=plain)
     end
 end
 """
     matrix(ops::Operators, ts₁::TargetSpace, ts₂::TargetSpace, table) -> Matrix
+    matrix(ops::Operators, ts::TargetSpace, table) -> Matrix
 
 Get the matrix of direct sum of submatrices.
 """
 function matrix(ops::Operators, ts₁::TargetSpace, ts₂::TargetSpace, table)
-    return hcat([vcat([matrix2(ops, (bra, ket), table) for bra in ts₁.sectors]...) for ket in ts₂.sectors]...)
+    return hcat([vcat([matrix(ops, (bra, ket), table) for bra in ts₁.sectors]...) for ket in ts₂.sectors]...)
 end
 matrix(ops::Operators, ts::TargetSpace, table) = matrix(ops, ts, ts, table)
 
-# matrix of ED
-function matrix2(op::Operator, braket::NTuple{2, BinaryBases}, table; dtype=valtype(op))
-    bra, ket = braket[1], braket[2]
-    ndata, intermediate = 1, zeros(ket|>eltype, rank(op)+1)
-    data, indices, indptr = zeros(dtype, dimension(ket)), zeros(Int, dimension(ket)), zeros(Int, dimension(ket)+1)
-    sequence = NTuple{rank(op), Int}(table[op[i]] for i in reverse(1:rank(op)))
-    iscreation = NTuple{rank(op), Bool}(oid.index.iid.nambu==creation for oid in reverse(id(op)))
-    for i = 1:dimension(ket)
-        flag = true
-        indptr[i] = ndata
-        intermediate[1] = ket[i]
-        for j = 1:rank(op)
-            isone(intermediate[j], sequence[j])==iscreation[j] && (flag = false; break)
-            intermediate[j+1] = iscreation[j] ? one(intermediate[j], sequence[j]) : zero(intermediate[j], sequence[j])
-        end
-        if flag
-            nsign = 0
-            statistics(eltype(op))==:f && for j = 1:rank(op)
-                nsign += count(intermediate[j], 1, sequence[j]-1)
-            end
-            index = searchsortedfirst(intermediate[end], bra)
-            if index <= dimension(bra) && bra[index] == intermediate[end]
-                indices[ndata] = index
-                data[ndata] = op.value*(-1)^nsign    
-                ndata += 1
-            end
-        end
-    end
-    indptr[end] = ndata
-    return SparseMatrixCSC(dimension(bra), dimension(ket), indptr, indices[1:ndata-1], data[1:ndata-1])
-end
-function matrix2(ops::Operators, braket::NTuple{2, BinaryBases}, table; dtype=valtype(eltype(ops)))
-    result = spzeros(dtype, dimension(braket[1]), dimension(braket[2]))
-    for op in ops
-        result += matrix2(op, braket, table; dtype=dtype)
-    end
-    return result
-end
 
 end #module 
