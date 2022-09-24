@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Kitaev model on honeycomb lattice · SecondOrderPerturbationTheory.jl</title><script data-outdated-warner src="../../assets/warner.js"></script><link rel="canonical" href="https://Quantum-Many-Body.github.io/SecondOrderPerturbationTheory.jl/examples/KitaevModel/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">SecondOrderPerturbationTheory.jl</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../Introduction/">Introduction</a></li><li class="is-active"><a class="tocitem" href>Kitaev model on honeycomb lattice</a><ul class="internal"><li><a class="tocitem" href="#Construct-the-Generator-of-pseudospin-1/2"><span>Construct the Generator of pseudospin-1/2</span></a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Kitaev model on honeycomb lattice</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Kitaev model on honeycomb lattice</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/Quantum-Many-Body/SecondOrderPerturbationTheory.jl/blob/master/docs/src/examples/KitaevModel.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Kitaev-model-on-honeycomb-lattice"><a class="docs-heading-anchor" href="#Kitaev-model-on-honeycomb-lattice">Kitaev model on honeycomb lattice</a><a id="Kitaev-model-on-honeycomb-lattice-1"></a><a class="docs-heading-anchor-permalink" href="#Kitaev-model-on-honeycomb-lattice" title="Permalink"></a></h1><p>Construct the Kitaev model by projecting multi-orbital Hubbard model into the low-energy hilbert space.</p><pre><code class="language-julia hljs">using QuantumLattices: Lattice, Hopping, Hubbard, Onsite, Generator, Bonds, Hilbert, @σˣ_str,@σʸ_str,@σᶻ_str, @fc_str, @σ⁰_str
+using QuantumLattices: Couplings, InterOrbitalInterSpin, InterOrbitalIntraSpin, SpinFlip, PairHopping, matrix
+using QuantumLattices: PID, Point, Fock, FockCoupling, ⊗ ,rcoord, azimuthd
+using ExactDiagonalization: BinaryBases,TargetSpace
+using SecondOrderPerturbationTheory
+
+#define lattice, hilbert, and multi-orbital Hubbard model
+lattice = Lattice(:Honeycomb,
+    [Point(PID(1),(0.0,0.0),(0.0,0.0)), Point(PID(2),[1/2,1/(2*sqrt(3))],[0.0,0.0])],
+    vectors = [[1.0,0.0],[1/2.0,sqrt(3)/2]],
+    neighbors = 1)
+hilbert = Hilbert(pid=&gt;Fock{:f}(norbital=3, nspin=2, nnambu=2) for pid in lattice.pids)
+
+tij = [58.7 113.9 -7.0;
+        113.9 58.7 -7.0;
+        -7.0 -7.0 -194.1]
+tijx = [-194.1 -7.0 -7.0;
+        -7.0  58.7  113.9;
+         -7.0 113.9 58.7]
+tijy = [58.7 -7.0  113.9 ;
+        -7.0  -194.1 -7.0;
+         113.9 -7.0  58.7]
+
+function fcmatrixob(tij::Matrix{&lt;:Number}; kwargs...)
+    fc = []
+    n, m = size(tij)
+    for i=1:m
+        for j=1:n
+            push!(fc, FockCoupling{2}(tij[j,i]; orbitals=(j,i), nambus=(2,1), kwargs...) )
+        end
+    end
+    return Couplings(fc...)
+end
+
+tfc = fcmatrixob(tij)
+tfcx = fcmatrixob(tijx)
+tfcy = fcmatrixob(tijy)
+macro Lˣ_str(::String) fc&quot;1.0im ob[2 3]&quot; - fc&quot;1.0im ob[3 2]&quot; end
+macro Lʸ_str(::String) fc&quot;1.0im ob[3 1]&quot; - fc&quot;1.0im ob[1 3]&quot; end
+macro Lᶻ_str(::String) fc&quot;1.0im ob[1 2]&quot; - fc&quot;1.0im ob[2 1]&quot; end
+macro L⁰_str(::String) fc&quot;1.0 ob[1 1]&quot; + fc&quot;1.0 ob[2 2]&quot; + fc&quot;1.0 ob[3 3]&quot; end
+macro soc_str(::String) 0.5*(Lˣ&quot;&quot;⊗σˣ&quot;sp&quot; + Lʸ&quot;&quot;⊗σʸ&quot;sp&quot;+ Lᶻ&quot;&quot;⊗σᶻ&quot;sp&quot;) end
+macro Jˣ_str(::String) 0.5*(L⁰&quot;&quot;⊗σˣ&quot;sp&quot;) - Lˣ&quot;&quot;⊗σ⁰&quot;sp&quot; end
+macro Jʸ_str(::String) 0.5*(L⁰&quot;&quot;⊗σʸ&quot;sp&quot;) - Lʸ&quot;&quot;⊗σ⁰&quot;sp&quot; end
+macro Jᶻ_str(::String) 0.5*(L⁰&quot;&quot;⊗σᶻ&quot;sp&quot;) - Lᶻ&quot;&quot;⊗σ⁰&quot;sp&quot; end
+macro J⁰_str(::String) L⁰&quot;&quot;⊗σ⁰&quot;sp&quot; end
+
+Lx = [0 0 0; 0  0 im; 0 -im 0]
+Ly = [0 0 -im; 0 0 0; im 0 0]
+Lz = [0 im 0; -im 0 0; 0 0 0]
+L0 = [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0]
+
+UU = 4000.0
+Jₕ = 0.2*UU
+lambda = 140.0
+t = Hopping(:tz, 1.0, 1, couplings=tfc, amplitude=bond-&gt;((bond|&gt;rcoord|&gt;azimuthd ≈ 270 || bond|&gt;rcoord|&gt;azimuthd ≈ 90) ? 1 : 0) )
+t1 = Hopping(:tx, 1.0, 1, couplings=tfcx, amplitude=bond-&gt;((bond|&gt;rcoord|&gt;azimuthd ≈ 150 || bond|&gt;rcoord|&gt;azimuthd ≈ 330) ? 1 : 0) )
+t2 = Hopping(:ty, 1.0, 1, couplings=tfcy, amplitude=bond-&gt;((bond|&gt;rcoord|&gt;azimuthd ≈ 30 || bond|&gt;rcoord|&gt;azimuthd ≈ 210) ? 1 : 0) )
+
+U = Hubbard(:U, UU)
+U′ = InterOrbitalInterSpin(Symbol(&quot;U′&quot;), UU-2*Jₕ)
+UmJ = InterOrbitalIntraSpin(Symbol(&quot;U′-J&quot;), UU-3*Jₕ)
+J = SpinFlip(Symbol(&quot;J&quot;), Jₕ)
+Jp = PairHopping(:Jp, Jₕ)
+λ = Onsite(:λ, 1.0+0.0im, couplings=lambda*soc&quot;&quot;)
+
+#define the low-energy configure
+bc = BinaryConfigure(pid=&gt;TargetSpace(BinaryBases([1,2,3,4,5,6],5)) for pid in lattice.pids)
+ls = PickState(PID(1)=&gt;[[1,2]], PID(2)=&gt;[[1,2]])
+sopt = SOPT(lattice, hilbert, (t, t1, t2), (U, U′, UmJ, J, Jp, λ), bc, ls)
+
+#define the physical observables
+s0 = Onsite(:s0, 1.0)
+sx = Onsite(:sx, 1.0+0im, couplings=Jˣ&quot;&quot;)
+sy = Onsite(:sx, 1.0+0im, couplings=Jʸ&quot;&quot;)
+sz = Onsite(:sx, 1.0+0im, couplings=Jᶻ&quot;&quot;)
+p₀ = projectstate_points(sopt)
+coeff = Coefficience(lattice, hilbert, (s0,sx,sy,sz), p₀[1]; η=1e-10 )
+
+#obtain the exchange interactions of spin model
+bond = Bonds(lattice)[4]
+soptmatrix = matrix(sopt,bond)
+Jmat = coefficience_project(soptmatrix, coeff)
+
+#test
+txx, tyx, tzx, txy, tyy, tzy, txz, tyz, tzz = tij[1, 1], tij[2, 1], tij[3, 1], tij[1, 2], tij[2, 2], tij[3, 2], tij[1, 3], tij[2, 3], tij[3, 3]
+lambda1 = lambda
+A = -1/3 * (Jₕ+9*lambda1+3*UU) / (6*Jₕ^2-UU*(3*lambda1+UU)+Jₕ*(4*lambda1+UU))
+η = Jₕ / (6*Jₕ^2+(3*lambda1+UU)*(3*lambda1+2*UU)-Jₕ*(17*lambda1+8*UU))
+B = 4/3 * (3*Jₕ-3*lambda1-UU) / (6*Jₕ-3*lambda1-2*UU)*η
+
+J23 = 8*A/9*(-(txy-tyx)*(txz-tzx)-(tyz-tzy)*(txx+tyy+tzz)) + 4*B/9*(txy*(5*txz-2*tzx)+5*tyx*(tzx+2*txz)+(5*tyz+tzy)*(tyy+tzz-2*txx))
+J11 = 4*A/9*(-(txy-tyx)^2-(txz-tzx)^2+(tyz-tzy)^2+(txx+tyy+tzz)^2)+4*B/9*((txy-tyx)^2+(txz-tzx)^2-2(2tyz+tzy)*(tyz+2tzy)+2(txx+tyy-2tzz)*(txx-2tyy+tzz))
+J33 = 4*A/9*(-(txz-tzx)^2-(txy-tyx)^2+(tyz-tzy)^2+(txx+tyy+tzz)^2)+4*B/9*((txz-tzx)^2+(tyz-tzy)^2-2(2txy+tyx)*(txy+2tyx)+2(tzz+tyy-2txx)*(txx-2tyy+tzz))
+J12 = 8*A/9*(-(tyz-tzy)*(txz-tzx)-(txy-tyx)*(txx+tyy+tzz)) + + 4*B/9*(tzx*(5*tzy-2*tyz)+5*txz*(tyz+2*tzy)+(5*txy+tyx)*(tyy+txx-2*tzz))
+
+(Jmat[2,2] ≈ J11, Jmat[4,4] ≈ J33, Jmat[2,3] ≈ J12, Jmat[3,4] ≈ J23)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(true, true, true, true)</code></pre><h2 id="Construct-the-Generator-of-pseudospin-1/2"><a class="docs-heading-anchor" href="#Construct-the-Generator-of-pseudospin-1/2">Construct the Generator of pseudospin-1/2</a><a id="Construct-the-Generator-of-pseudospin-1/2-1"></a><a class="docs-heading-anchor-permalink" href="#Construct-the-Generator-of-pseudospin-1/2" title="Permalink"></a></h2><pre><code class="language-julia hljs">#define Generator of spin-1/2
+gen = coefficience_project(sopt, coeff;η=1e-10)
+
+#latexformat of spin-1/2, add :icoord subscript.
+using QuantumLattices: idtype, latexformat, slatex, LaTeX, expand
+optspin = gen|&gt;expand
+T = optspin|&gt;typeof|&gt;eltype|&gt;idtype|&gt;eltype
+latexformat(T, LaTeX{(:tag,), (:site, :icoord)}(:S, vectors=lattice.vectors))
+optspin</code></pre><p class="math-container">\[-0.07288S^{y}_{2, [0.0, 0.0]}S^{x}_{1, [0.0, 0.0]}+6.7618S^{x}_{2, [0.0, 0.0]}S^{z}_{1, [0.0, 0.0]}-0.07288S^{z}_{2, [-0.5, -0.86603]}S^{y}_{1, [0.0, 0.0]}-3.80476S^{z}_{2, [-1.0, 0.0]}S^{z}_{1, [0.0, 0.0]}-3.80476S^{x}_{2, [0.0, 0.0]}S^{x}_{1, [0.0, 0.0]}+6.7618S^{y}_{2, [-1.0, 0.0]}S^{z}_{1, [0.0, 0.0]}-0.07288S^{z}_{2, [-1.0, 0.0]}S^{x}_{1, [0.0, 0.0]}-0.07288S^{y}_{2, [-0.5, -0.86603]}S^{z}_{1, [0.0, 0.0]}-0.86097S^{z}_{2, [-0.5, -0.86603]}S^{z}_{1, [0.0, 0.0]}-3.80476S^{z}_{2, [0.0, 0.0]}S^{z}_{1, [0.0, 0.0]}-0.07288S^{z}_{2, [-0.5, -0.86603]}S^{x}_{1, [0.0, 0.0]}-0.86097S^{y}_{2, [0.0, 0.0]}S^{y}_{1, [0.0, 0.0]}-0.07288S^{z}_{2, [0.0, 0.0]}S^{y}_{1, [0.0, 0.0]}+6.7618S^{z}_{2, [-1.0, 0.0]}S^{y}_{1, [0.0, 0.0]}-0.07288S^{x}_{2, [0.0, 0.0]}S^{y}_{1, [0.0, 0.0]}-0.07288S^{x}_{2, [-1.0, 0.0]}S^{z}_{1, [0.0, 0.0]}-0.07288S^{y}_{2, [-1.0, 0.0]}S^{x}_{1, [0.0, 0.0]}-0.07288S^{y}_{2, [0.0, 0.0]}S^{z}_{1, [0.0, 0.0]}-3.80476S^{y}_{2, [-1.0, 0.0]}S^{y}_{1, [0.0, 0.0]}-0.86097S^{x}_{2, [-1.0, 0.0]}S^{x}_{1, [0.0, 0.0]}-3.80476S^{y}_{2, [-0.5, -0.86603]}S^{y}_{1, [0.0, 0.0]}-0.07288S^{x}_{2, [-1.0, 0.0]}S^{y}_{1, [0.0, 0.0]}+6.7618S^{y}_{2, [-0.5, -0.86603]}S^{x}_{1, [0.0, 0.0]}+6.7618S^{z}_{2, [0.0, 0.0]}S^{x}_{1, [0.0, 0.0]}+6.7618S^{x}_{2, [-0.5, -0.86603]}S^{y}_{1, [0.0, 0.0]}-3.80476S^{x}_{2, [-0.5, -0.86603]}S^{x}_{1, [0.0, 0.0]}-0.07288S^{x}_{2, [-0.5, -0.86603]}S^{z}_{1, [0.0, 0.0]}\]</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../Introduction/">« Introduction</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.22 on <span class="colophon-date" title="Saturday 24 September 2022 15:47">Saturday 24 September 2022</span>. Using Julia version 1.8.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
