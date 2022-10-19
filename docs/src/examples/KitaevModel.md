@@ -65,8 +65,8 @@ sopt = SOPT(lattice, hilbert, (t, t1, t2), (U, U′, UmJ, J, Jp, λ), bc, ls)
 #define the physical observables
 s0 = Onsite(:s0, 1.0)
 sx = Onsite(:sx, 1.0 + 0im, Jx)
-sy = Onsite(:sx, 1.0 + 0im, Jy)
-sz = Onsite(:sx, 1.0 + 0im, Jz)
+sy = Onsite(:sy, 1.0 + 0im, Jy)
+sz = Onsite(:sz, 1.0 + 0im, Jz)
 p₀ = projectstate_points(sopt)
 coeff = Coefficience(lattice, hilbert, (s0, sx, sy, sz), p₀[1]; η=1e-10 )
 
