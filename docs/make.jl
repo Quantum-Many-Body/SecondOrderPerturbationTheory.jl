@@ -5,7 +5,7 @@ DocMeta.setdocmeta!(SecondOrderPerturbationTheory, :DocTestSetup, :(using Second
 
 makedocs(;
     modules=[SecondOrderPerturbationTheory],
-    authors="wwangnju <wwangnju@163.com> and contributors",
+    authors="wwangnju <wwangnju@163.com>",
     repo="https://github.com/Quantum-Many-Body/SecondOrderPerturbationTheory.jl/blob/{commit}{path}#{line}",
     sitename="SecondOrderPerturbationTheory.jl",
     format=Documenter.HTML(;

@@ -7,7 +7,7 @@ CurrentModule = SecondOrderPerturbationTheory
 Construct the Kitaev model by projecting multi-orbital Hubbard model into the low-energy hilbert space.
 
 ```@example KitaevModel
-using QuantumLattices: Lattice, Hopping, Hubbard, Onsite, OperatorGenerator, bonds, Hilbert
+using QuantumLattices: Lattice, Hopping, Hubbard, Onsite, OperatorGenerator, bonds, Hilbert,  Algorithm
 using QuantumLattices:  InterOrbitalInterSpin, InterOrbitalIntraSpin, SpinFlip, PairHopping, matrix
 using QuantumLattices: Point, Fock, MatrixCoupling, ⊗ ,rcoordinate, azimuthd, @σ_str, @L_str, FID
 using ExactDiagonalization: BinaryBases,TargetSpace
@@ -67,13 +67,17 @@ s0 = Onsite(:s0, 1.0)
 sx = Onsite(:sx, 1.0 + 0im, Jx)
 sy = Onsite(:sy, 1.0 + 0im, Jy)
 sz = Onsite(:sz, 1.0 + 0im, Jz)
-p₀ = projectstate_points(sopt)
-coeff = Coefficience(lattice, hilbert, (s0, sx, sy, sz), p₀[1]; η=1e-10 )
+
+p₀, = projectstate_points(sopt)
+
 
 #obtain the exchange interactions of spin model
 bond = bonds(lattice, 1)[4]
-soptmatrix = matrix(sopt, bond)
-Jmat = coefficience_project(soptmatrix, coeff)
+coeff = Coefficience([bond], 2, (s0, sx, sy, sz); halfspin=true)
+res = Algorithm(:sopt, sopt)(:zbond, coeff)
+#soptmatrix = matrix(sopt, bond)
+#Jmat = coefficience_project(soptmatrix, coeff)
+Jmat = res[2].data[2][1]
 
 #test
 txx, tyx, tzx, txy, tyy, tzy, txz, tyz, tzz = tijz[1, 1], tijz[2, 1], tijz[3, 1], tijz[1, 2], tijz[2, 2], tijz[3, 2], tijz[1, 3], tijz[2, 3], tijz[3, 3]
@@ -95,7 +99,7 @@ J13 = 8*A/9*(-(tyz-tzy)*(tyx-txy)-(txz-tzx)*(txx+tyy+tzz)) + 4*B/9*(tyx*(5*tyz-2
 ## Construct the Generator of pseudospin-1/2
 ```@example KitaevModel
 #define Generator of spin-1/2
-gen = coefficience_project(sopt, coeff;η=1e-10)
+gen = SpinOperatorGenerator(sopt, coeff;η=1e-10)
 
 #latexformat of spin-1/2, add :icoord subscript.
 using QuantumLattices: idtype, latexformat, LaTeX, expand

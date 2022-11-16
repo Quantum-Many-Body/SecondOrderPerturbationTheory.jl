@@ -1,5 +1,5 @@
 using Test
-using QuantumLattices: Lattice, dimension, ⊗, ⊕, matrix, expand, Table, Point, Fock
+using QuantumLattices: Lattice, dimension, ⊗, ⊕, matrix, expand, Table, Point, Fock, Algorithm
 using QuantumLattices: Hopping, Hubbard, Onsite, OperatorGenerator, bonds, Hilbert, Bond, MatrixCoupling, FID
 using ExactDiagonalization: BinaryBases, TargetSpace
 using LinearAlgebra: diag
@@ -66,6 +66,10 @@ end
     @test psb₂₃.both.values == ps₃₂.values
     @test psb₂₃.both.vectors == ps₃₂.vectors
     @test psb₂₃.both.basis == ps₃₂.basis
+    psb = ProjectStateBond(ps₂, nothing)
+    @test psb.both.values == ps₂.values
+    @test psb.both.vectors == ps₂.vectors
+    @test psb.both.basis == ps₂.basis
 end
 @testset "SOPT,SecondOrderPerturbation and Coefficience" begin
     bond = Bond(1, Point(1, [0.0], [0.0]), Point(2, [1.0], [0.0]))
@@ -78,19 +82,17 @@ end
     @test soptmat.m₂ ≈ Float64[0.0 0.0 0.0 0.0; 0.0 -0.5 0.5 0.0; 0.0 0.5 -0.5 0.0; 0.0 0.0 0.0 0.0]
     
     p₀, pp = projectstate_points(sopt::SOPT)
+    @test p₀[1].values ≈ [-0.5, -0.5]
     σx = [0 1.0; 1 0]; σy = [0 -im; im 0]; σz = [1 0; 0 -1]; σ0=[1 0; 0 1]
     ob = Dict{Int, Vector{Matrix{ComplexF64}}}(1=>[σ0, σx, σy, σz], 2=>[σ0, σx, σy, σz])
-    coeff = Coefficience(ob; η=1e-12, order=-1)
-    @test eltype(coeff) == Matrix{ComplexF64}
-    coeff2 = Coefficience(Matrix{ComplexF64}[σ0, 1.0*σx, σy, σz], lattice; η=1e-12, order=-1)
+    coeff = Coefficience([bond], ob; η=1e-12, order=-1)
+    coeff2 = Coefficience([bond], 2, Matrix{ComplexF64}[σ0, 1.0*σx, σy, σz]; η=1e-12, order=-1)
     @test coeff2.observables == coeff.observables
     s0 = Onsite(:s0, 1.0)
     sx = Onsite(:sx, 1.0+0im, MatrixCoupling(:, FID, :, σx, :))
-    sy = Onsite(:sx, 1.0+0im, MatrixCoupling(:, FID, :, σy, :))
-    sz = Onsite(:sx, 1.0+0im, MatrixCoupling(:, FID, :, σz, :))
-    coeff3 = Coefficience(lattice, hilbert, (s0, sx, sy, sz), p₀)
-    @test coeff3.observables == coeff.observables
-    Jcoef3 = coefficience_project(soptmat, coeff3)
-    Jcoef2 = coefficience_project(soptmat, coeff2)
-    @test real.(diag(Jcoef3)) ≈ real.(diag(Jcoef2)) ≈ [-1.25, 0.25, 0.25, 0.25]
+    sy = Onsite(:sy, 1.0+0im, MatrixCoupling(:, FID, :, σy, :))
+    sz = Onsite(:sz, 1.0+0im, MatrixCoupling(:, FID, :, σz, :))
+    coeff3 = Coefficience([bond], 2, (s0, sx, sy, sz))
+    Jcoef = Algorithm(:AFM, sopt)(:Heisenberg, coeff3);
+    @test real.(diag(Jcoef[2].data[2][1])) ≈ [-0.25, 0.25, 0.25, 0.25]
 end
