@@ -4,10 +4,10 @@ using LinearAlgebra: eigen, Hermitian, diagm, ishermitian, pinv, norm, inv
 using ExactDiagonalization: BinaryBasis, BinaryBases, TargetSpace, productable, isone, count
 using Base.Iterators: product
 using QuantumLattices: Hilbert, AbstractLattice, OperatorGenerator, Operators, Frontend, Term, Boundary, CompositeDict, Algorithm, Assignment, Parameters
-using QuantumLattices: Transformation, Bond, id, expand!, isintracell, Neighbors, Point, SpinTerm, Spin, Action
+using QuantumLattices: Transformation, Bond, id, expand!, isintracell, Neighbors, Point, SpinTerm, Spin, Action, rcoordinate, icoordinate
 using QuantumLattices:  CompositeIndex, Index, Metric, OperatorUnitToTuple, plain, bonds, MatrixCoupling, SID
 import QuantumLattices: dimension, ⊗, ⊕, matrix, expand, Table, initialize, run!, update!
-
+using DelimitedFiles: writedlm
 
 export ⊠, ProjectState, ProjectStateBond, BinaryConfigure, PickState, SecondOrderPerturbation
 export SOPT, SOPTMatrix, hamiltonianeff, projectstate_points, SecondOrderPerturationMetric 
@@ -667,6 +667,64 @@ function observables_project(terms::Tuple{Vararg{Term}}, point::Point, hilbert::
     res = map(op->(psp.vectors'*Array(matrix(op, psp.basis, table))*psp.vectors), ops)
     return collect(res)
 end
+
+#output
+import Base.write
+using Latexify
+function Base.write(filename::AbstractString, jcoef::Tuple{Algorithm{<:SOPT}, Assignment{<:Coefficience}}; scale=1)
+    assign = jcoef[2]
+    dist = []
+    sites = []
+    mats = []
+    dist0 = []
+    mats0 = []
+    for (i, bond) in enumerate(assign.action.bonds)
+        if !(bond.kind == 0)
+            push!(dist, round(rcoordinate(bond)|>norm,digits=4))
+            push!(sites, (bond[1].site, bond[2].site, icoordinate(bond)))
+            push!(mats, assign.data[2][i]*scale)
+        else
+            push!(dist0, bond[1].site)
+            push!(mats0, assign.data[2][i]*scale)
+        end
+    end
+    ind = sortperm(dist)
+    open(filename, "w") do f
+        write(f, "J_ij S_i*S_j matrix of spin model (R = Rj-Ri in Cartesian coordinate): \n\n")
+        for (i, site) in enumerate(dist0)
+            mats0[i][abs.(mats0[i]).<1e-6] .=0
+            write(f, "On-site J of atom = $(site) : \n")
+            writedlm(f, round.(real.(mats0[i]), digits=5))
+            write(f,"\n")
+        end 
+        for i in ind
+            mat = mats[i]
+            mat[abs.(mat).<1e-6] .=0
+            write(f, "distance = $(dist[i]), atom_i = $(sites[i][1]), atom_j =$(sites[i][2]), R =$(sites[i][3]): \n")
+            writedlm(f, round.(real.(mat), digits=5))
+            write(f,"\n")
+        end
+    end
+    open("Latex_"*filename, "w") do f
+        write(f, "J_ij S_i*S_j matrix of spin model (R = Rj-Ri in Cartesian coordinate): \n\n")
+        for (i, site) in enumerate(dist0)
+            mats0[i][abs.(mats0[i]).<1e-6] .=0
+            write(f, "On-site J of atom = $(site) : \n")
+            write(f, latexify(round.(real.(mats0[i]), digits=5), fmt="%.5f"))
+            write(f,"\n")
+        end 
+        for i in ind
+            mat = mats[i]
+            mat[abs.(mat).<1e-6] .=0
+            write(f, "distance = $(dist[i]), atom_i = $(sites[i][1]), atom_j =$(sites[i][2]), R =$(sites[i][3]): \n")
+            write(f, latexify(round.(real.(mat), digits=5), fmt="%.5f"))
+            write(f,"\n")
+        end
+    end
+end
+
+
+
 
 # only for spin-1/2 case
 

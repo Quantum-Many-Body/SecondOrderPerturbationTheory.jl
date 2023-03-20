@@ -4,7 +4,9 @@ authors = ["wwangnju <wwangnju@163.com>"]
 version = "0.2.1"
 
 [deps]
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 ExactDiagonalization = "52dcaa32-6da7-11e9-20ef-755843cf72eb"
+Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 QuantumLattices = "78ae1a1f-1d5d-5174-b61c-66e31b2346dc"
