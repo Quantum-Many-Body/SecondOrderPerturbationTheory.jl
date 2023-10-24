@@ -5,9 +5,12 @@ using ExactDiagonalization: BinaryBasis, BinaryBases, TargetSpace, productable, 
 using Base.Iterators: product
 using QuantumLattices: Hilbert, AbstractLattice, OperatorGenerator, Operators, Frontend, Term, Boundary, CompositeDict, Algorithm, Assignment, Parameters
 using QuantumLattices: Transformation, Bond, id, expand!, isintracell, Neighbors, Point, SpinTerm, Spin, Action, rcoordinate, icoordinate
-using QuantumLattices:  CompositeIndex, Index, Metric, OperatorUnitToTuple, plain, bonds, MatrixCoupling, SID
+using QuantumLattices:  CompositeIndex, Index, Metric, OperatorUnitToTuple, plain, bonds, MatrixCoupling, SID, Operator, Operators
 import QuantumLattices: dimension, ⊗, ⊕, matrix, expand, Table, initialize, run!, update!
 using DelimitedFiles: writedlm
+using SparseArrays
+using Kronecker: kronecker
+using BlockDiagonals: BlockDiagonal
 
 export ⊠, ProjectState, ProjectStateBond, BinaryConfigure, PickState, SecondOrderPerturbation
 export SOPT, SOPTMatrix, hamiltonianeff, projectstate_points, SecondOrderPerturationMetric 
@@ -19,7 +22,7 @@ Get the direct product of two sets of binary bases, and the permutation vector.
 """
 function ⊠(bs₁::BinaryBases, bs₂::BinaryBases)
     @assert productable(bs₁, bs₂) "⊠ error: the input two sets of bases cannot be direct producted."
-    table = Vector{promote_type(eltype(bs₁), eltype(bs₂))}(undef, dimension(bs₁)*dimension(bs₂))
+    table = Vector{promote_type(eltype(bs₁), eltype(bs₂))}(undef, length(bs₁)*length(bs₂))
     count₀ = 1
     for (b₁, b₂) in product(bs₁, bs₂)
         table[count₀] = b₁⊗b₂
@@ -53,13 +56,13 @@ end
 
 Projected states contain eigenvalues, eigenvectors, and basis of H₀. 
 """
-struct ProjectState{V<:Real, C<:Number, P<:TargetSpace} 
+struct ProjectState{V<:Real, C<:Number, P<:TargetSpace}
     values :: Vector{V}
-    vectors :: Matrix{C}
+    vectors :: AbstractMatrix{C}
     basis :: P
-    function ProjectState(values::Vector{V}, vectors::Matrix{C}, basis::TargetSpace) where {V<:Real,C<:Number}
+    function ProjectState(values::Vector{V}, vectors::AbstractMatrix{C}, basis::TargetSpace) where {V<:Real, C<:Number}
         (nbasis, nvec) = size(vectors)
-        @assert length(values) == nvec && (sum(dimension.(basis.sectors)) == nbasis ) "ProjectState error: dimensions of values, vectors, and basis do not match each other."
+        @assert length(values) == nvec && (sum(length.(basis.sectors)) == nbasis ) "ProjectState error: dimensions of values, vectors, and basis do not match each other."
         new{V, C, typeof(basis)}(values, vectors, basis)
     end
 end
@@ -76,26 +79,19 @@ The dimension of local low-energy hilbert space.
 
 The dimension of target space `basis`.
 """
-@inline dimension(ps::ProjectState, ::Type{T}) where T<:TargetSpace = sum(dimension.(ps.basis.sectors))
+@inline dimension(ps::ProjectState, ::Type{T}) where T<:TargetSpace = sum(length.(ps.basis.sectors))
 
-@inline function (Base.:*)(ps::ProjectState, u::Matrix{<:Number}) 
+@inline function (Base.:*)(ps::ProjectState, u::AbstractMatrix{<:Number}) 
     @assert size(u, 1) == size(ps.vectors, 2) ":* error: dimensions of unitary matrix and eigenvectors donot match each other."
     return ProjectState(ps.values, ps.vectors*u, ps.basis) 
 end
-@inline (Base.:*)(u::Matrix{<:Number}, ps::ProjectState) = ps*u
+@inline (Base.:*)(u::AbstractMatrix{<:Number}, ps::ProjectState) = ps*u
 function Base.convert(::Type{ProjectState{V, C, P}}, ps::ProjectState{V1, C1, P}) where {V1<:Real,C1<:Number, V<:Real, C<:Number, P<:TargetSpace}
     val = map(x->convert(V, x), ps.values)
     vec = C.(ps.vectors)
     return ProjectState(val, vec, ps.basis)
 end
-function Base.show(io::IO, ps::ProjectState)
-    @printf io "%s(%s)=" ":values" typeof(ps.values)
-    Base.show(io, ps.values)
-    @printf io "\n %s(%s)=" ":vectors" typeof(ps.vectors)
-    Base.show(io, ps.vectors)
-    @printf io "\n %s(%s)=" ":basis" nameof(typeof(ps.basis))
-    Base.show(io, ps.basis)
-end
+
 
 """
     ⊕(ps₁::ProjectState, ps₂::ProjectState) -> ProjectState
@@ -104,13 +100,8 @@ Get the direct sum of two projected states.
 """
 function ⊕(ps₁::ProjectState, ps₂::ProjectState)
     dtype₁ = promote_type(eltype(ps₁.values), eltype(ps₂.values))
-    dtype₂ = promote_type(eltype(ps₁.vectors), eltype(ps₂.vectors))
-    nbasis₁, nvec₁ = size(ps₁.vectors) 
-    nbasis₂, nvec₂ = size(ps₂.vectors)
     values = (dtype₁)[ps₁.values; ps₂.values]
-    vectors = zeros(dtype₂, nbasis₁ + nbasis₂, nvec₁ + nvec₂)
-    vectors[1:nbasis₁, 1:nvec₁] = ps₁.vectors
-    vectors[1+nbasis₁:end, 1+nvec₁:end] = ps₂.vectors
+    vectors = BlockDiagonal([ps₁.vectors, ps₂.vectors])
     basis = ps₁.basis⊕ps₂.basis  
     return ProjectState(values, vectors, basis)
 end 
@@ -135,7 +126,8 @@ function ⊗(ps₁::ProjectState, ps₂::ProjectState)
         count₀ += length(p₀)
     end
     basis = TargetSpace(bs...)
-    vectors = (Base.kron(ps₂.vectors, ps₁.vectors))[p, :]
+    temp = kronecker(ps₂.vectors, ps₁.vectors)
+    vectors = @view temp[p, 1:end]
     return ProjectState(values, vectors, basis)
 end 
 """
@@ -147,6 +139,7 @@ function Base.:(<<)(ps::ProjectState, n::Int)
        basis = TargetSpace([bs << n for bs in ps.basis.sectors]...)
        return ProjectState(ps.values, ps.vectors, basis)
 end
+using Arpack:eigs
 """
     ProjectState(ops::Operators, braket::BinaryBases, table; pick::Union{UnitRange{Int}, Vector{Int}, Colon}=:)
     ProjectState(ops::Operators, ts::TargetSpace, table, pick::Vector{Vector{Int}})
@@ -154,11 +147,12 @@ end
 Construct `ProjectState`. The pick::Union{UnitRange{Int}, Vector{Int}, Colon} argument picks the low-energy states. The i-th element of arguement pick vector is the loaction of low-energy states in the i-th `Sector` of `TargetSpace`.
 """
 function ProjectState(ops::Operators, braket::BinaryBases, table; pick::Union{UnitRange{Int}, Vector{Int}, Colon}=:)
-    hm = matrix(ops, (braket, braket), table)
+    hm = (matrix(ops, (braket, braket), table))
     hm2 = Hermitian(Array(hm+hm')/2)
     F = eigen(hm2)
     basis = TargetSpace(braket)
-    return ProjectState(F.values[pick], F.vectors[:, pick], basis)
+    temp = (F.vectors[:, pick])
+    return ProjectState(F.values[pick], temp, basis)
 end
 function ProjectState(ops::Operators, ts::TargetSpace, table, pick::Vector{Vector{Int}})
     res = []
@@ -176,12 +170,6 @@ Projected states on a bond. Construct `ProjectStateBond` by the two `ProjectStat
 struct ProjectStateBond
     left::ProjectState
     right::Union{ProjectState, Nothing}
-    both::ProjectState
-    function ProjectStateBond(left::ProjectState, right::Union{ProjectState, Nothing})
-        isnothing(right) && return new(left, right, left)
-        both = left⊗right
-        new(left, right, both)
-    end
 end
 
 """
@@ -194,13 +182,7 @@ The `nleft` and `nright` are the number of bits of left bit shift operator for `
     right₁ = (right<<nright)
     return ProjectStateBond(left₁, right₁)
 end
-function Base.show(io::IO, ps::ProjectStateBond)
-    @printf io "%s= \n" "left ProjectState" 
-    Base.show(io, ps.left)
-    @printf io "\n %s= \n" "right ProjectState" 
-    Base.show(io, ps.right)
-    @printf io "\n %s = %s" "both ProjectState" "left⊗right"
-end
+@inline ProjectStateBond(ps::ProjectState) = ProjectStateBond(ps, nothing)
 """
     BinaryConfigure{I<:TargetSpace, P<:Int} <: CompositeDict{P, I}
     BinaryConfigure(ps::Pair...)
@@ -278,14 +260,15 @@ function (sodp::SecondOrderPerturbation)(H₁::OperatorGenerator, p₀::Dict{T,<
     @assert length(bond) == 2 "(::SecondOrderPerturbation) error: the bond should have two points." 
     left = p₀[bond[1].site]
     right = p₀[bond[2].site]
-    nleft, nright = (bond[1].rcoordinate, bond[1].site) > (bond[2].rcoordinate, bond[2].site) ? (dimension(H₁.hilbert[bond[2].site])÷2, 0) : (0, dimension(H₁.hilbert[bond[1].site])÷2)
+    nleft, nright = (bond[1].rcoordinate, bond[1].site) > (bond[2].rcoordinate, bond[2].site) ? (length(H₁.hilbert[bond[2].site])÷2, 0) : (0, length(H₁.hilbert[bond[1].site])÷2)
     p = ProjectStateBond(left, right, nleft, nright)
-    q₁ = ⊗((qₚ[bond[1].site])<<nleft, (qₘ[bond[2].site])<<nright)
-    q₂ = ⊗((qₘ[bond[1].site])<<nleft, (qₚ[bond[2].site])<<nright)
-    q = (q₁⊕q₂)
+    q₁ = ProjectStateBond(qₚ[bond[1].site], qₘ[bond[2].site], nleft, nright)
+    q₂ = ProjectStateBond(qₘ[bond[1].site], qₚ[bond[2].site], nleft, nright)
     opts = expand(H₁, bond)
     table = Table(bond, H₁.hilbert, SecondOrderPerturationMetric())
-    m₀, m₀₁, m₂ = hamiltonianeff(p.both, q, opts, table) 
+    m₀, m₀₁, m₂₁ = hamiltonianeff(p, q₁, opts, table, bond) 
+    m₀, m₀₁, m₂₂ = hamiltonianeff(p, q₂, opts, table, bond) 
+    m₂ = Array(m₂₁) + Array(m₂₂)
     return SOPTMatrix(bond, p, m₀, m₀₁, m₂)
 end
 function (sodp::SecondOrderPerturbation)(H₀::OperatorGenerator, H₁::OperatorGenerator, bond::Bond)
@@ -295,7 +278,7 @@ function (sodp::SecondOrderPerturbation)(H₀::OperatorGenerator, H₁::Operator
     if length(bond) == 1
         opts = expand(H₁, bond)
         table = Table(bond, H₁.hilbert, SecondOrderPerturationMetric())
-        m₀, m₀₁, m₂ = hamiltonianeff(p₀[bond[1].site], qₙ[bond[1].site], opts, table) 
+        m₀, m₀₁, m₂ = hamiltonianeff(ProjectStateBond(p₀[bond[1].site]), ProjectStateBond(qₙ[bond[1].site]), opts, table) 
         pb = ProjectStateBond(p₀[bond[1].site], nothing)
         return SOPTMatrix(bond, pb, m₀, m₀₁, m₂)
     end
@@ -362,8 +345,8 @@ function _high_configure(bc::BinaryConfigure, ls::PickState, pid::Int)
             push!(plus, bbp)
             bbm = BinaryBases(findone(BinaryBasis(rep)), nparticle - 1)
             push!(minus, bbm)
-            push!(dimp, collect(1:dimension(bbp)))
-            push!(dimm, collect(1:dimension(bbm)))
+            push!(dimp, collect(1:length(bbp)))
+            push!(dimm, collect(1:length(bbm)))
         end
         for (i, bb) in enumerate( bc[key].sectors )
             bb ∈ plus && (dimp[i] = setdiff(dimp[i], ls[key][i]))
@@ -384,27 +367,83 @@ end
 
 Get the effective Hamiltonian, the first and second terms of the result correspond to the zero-th and 2nd perturbations respectively.
 """
-function hamiltonianeff(psp::ProjectState, psq::ProjectState, h1::Operators, table::Table) 
-    heff0 = diagm(psp.values)
-    heff01 = psp.vectors'*Array(matrix(h1, psp.basis, table))*psp.vectors
-    m₀ = heff0 
-    m₀₁ = Hermitian((heff01 + heff01')/2)
-    @assert maximum(norm.(heff01 - heff01'))<1e-12 "hamiltonianeff error: the zero-th perturbations matrix should be hermitian."
-    tqp = psq.vectors'*Array(matrix(h1, psq.basis, psp.basis, table))*psp.vectors
-    m, n = size(psp.vectors, 2), size(psq.vectors, 2)
-    sqp = zeros(eltype(psp.vectors), n, m)
-    for i = 1:m
-        for j = 1:n
-            sqp[j,i] = -tqp[j,i]/(-psp.values[i] + psq.values[j])
+function hamiltonianeff(psp::ProjectStateBond, psq::ProjectStateBond, h1::Operators, table::Table, bond::Union{Bond, Nothing}=nothing) 
+    if isa(psp.right, Nothing) && isa(psq.right, Nothing)
+        m₀ = diagm(psp.left.values)
+        temp = (psp.left.vectors)
+        h1mat = transpose(matrix(h1, psp.left.basis, psp.left.basis, table))
+        heff01 = transpose(transpose(temp)*((h1mat)*conj.(temp)))
+        h1mat₂ = (matrix(h1, psq.left.basis, psp.left.basis, table))
+        m₀₁ = Hermitian( heff01 )
+        tqp = (psq.left.vectors)'*(h1mat₂)*temp 
+        m, n = size(psp.left.vectors, 2), size(psq.left.vectors, 2)
+        sqp = zeros(eltype(psp.left.vectors), n, m)
+        for i = 1:m
+            for j = 1:n
+                sqp[j,i] = -tqp[j, i]/(-psp.left.values[i] + psq.left.values[j])
+            end
         end
+        spq = - sqp'
+        tpq = tqp' 
+        m₂ = (tpq*sqp - spq*tqp )/2.0
+    else
+        pbond = (psp.left⊗psp.right)
+        m₀ = diagm(pbond.values)
+        temp = pbond.vectors
+        h1mat = transpose(matrix(h1, pbond.basis, pbond.basis, table))
+        heff01 = transpose(transpose(temp)*((h1mat)*conj.(temp)))
+        m₀₁ = Hermitian( heff01 )
+        np1, np2, nq1, nq2 = size(psp.left.vectors, 2), size(psp.right.vectors, 2), size(psq.left.vectors, 2), size(psq.right.vectors, 2)
+        tqp = zeros(eltype(psp.left.vectors), nq1*nq2, np1*np2)
+        sqp = zeros(eltype(psp.left.vectors), nq1*nq2, np1*np2)
+        for opt in h1
+            mats = []
+            qvals = []
+            pvals = []
+            ins = []
+            for idx in opt
+                if idx.index.site == bond[1].site && idx.rcoordinate == bond[1].rcoordinate
+                    q = psq.left
+                    p = psp.left
+                    push!(ins, 2)
+                elseif idx.index.site == bond[2].site && idx.rcoordinate == bond[2].rcoordinate
+                    q = psq.right
+                    p = psp.right
+                    push!(ins, 1)
+                else
+                    error("hamiltonianeff error: something wrong")
+                end
+                tqpm = (q.vectors)'*matrix(Operators(Operator(1.0, idx)), q.basis, p.basis, table)*p.vectors
+                push!(mats, tqpm)
+                push!(qvals, q.values)
+                push!(pvals, p.values)
+            end
+            tm = opt.value*kronecker(mats[ins[1]], mats[ins[2]])
+            tqp += tm
+            qrlval = _kron(qvals[ins[1]], qvals[ins[2]])
+            prlval = _kron(pvals[ins[1]], pvals[ins[2]])
+            for i = 1:np1*np2
+                for j = 1:nq1*nq2
+                    sqp[j,i] += -tm[j, i]/(-prlval[i] + qrlval[j])
+                end
+            end
+        end
+        spq = - sqp'
+        tpq = tqp' 
+        m₂ = (tpq*sqp - spq*tqp )/2.0
     end
-    spq = - sqp'
-    tpq = tqp' 
-    m₂ = (tpq*sqp - spq*tqp )/2.0
+    @assert maximum(norm.(heff01 - heff01'))<1e-12 "hamiltonianeff error: the zero-th perturbations matrix should be hermitian."
     @assert maximum(norm.(m₂ - m₂'))<1e-14 "hamiltonianeff error: the 2nd perturbations matrix should be hermitian."
     return m₀, m₀₁, m₂
 end
-
+function _kron(values1::Vector, values2::Vector)
+    dtype₁ = promote_type(eltype(values1), eltype(values2))
+    values = (dtype₁)[]
+    for (val₁, val₂) in product(values1, values2)
+        push!(values, val₁ + val₂)
+    end
+    return values
+end
 """
     SOPT{L<:AbstractLattice, G₁<:OperatorGenerator, G₀<:OperatorGenerator, PT<:SecondOrderPerturbation} <: Frontend
 
@@ -459,7 +498,7 @@ end
         if length(bond) == 1
             opts = expand(H₁, bond)
             table = Table(bond, H₁.hilbert, SecondOrderPerturationMetric())
-            m₀, m₀₁, m₂ = hamiltonianeff(p₀[bond[1].site], qₙ[bond[1].site], opts, table) 
+            m₀, m₀₁, m₂ = hamiltonianeff(ProjectStateBond(p₀[bond[1].site]), ProjectStateBond(qₙ[bond[1].site]), opts, table) 
             pb = ProjectStateBond(p₀[bond[1].site], nothing)
             push!(res, SOPTMatrix(bond, pb, m₀, m₀₁, m₂))
         end 
@@ -553,12 +592,10 @@ function run!(sopt::Algorithm{<:SOPT}, coef::Assignment{<:Coefficience})
     append!(coef.data[1], matbds)
 
     for matbd in matbds
-        # matbd = matrix(sopt.frontend, bond) 
-        # push!(coef.data[1], matbd)
         ob = Dict{Int, Vector{Matrix{ComplexF64}}}()
         bond = matbd.bond
         if length(bond) == 2
-            nleft, nright = (bond[1].rcoordinate, bond[1].site) > (bond[2].rcoordinate, bond[2].site) ? (dimension(hilbert[bond[2].site])÷2, 0) : (0, dimension(hilbert[bond[1].site])÷2)
+            nleft, nright = (bond[1].rcoordinate, bond[1].site) > (bond[2].rcoordinate, bond[2].site) ? (length(hilbert[bond[2].site])÷2, 0) : (0, length(hilbert[bond[1].site])÷2)
         else
             nleft, nright = 0, 0 
         end
@@ -637,7 +674,7 @@ function coefficience_project(matbd::SOPTMatrix, coef::Coefficience, hilbert::Hi
     ob = Dict{Int, Vector{Matrix{ComplexF64}}}()
     bond = matbd.bond
     if length(bond) == 2
-        nleft, nright = (bond[1].rcoordinate, bond[1].site) > (bond[2].rcoordinate, bond[2].site) ? (dimension(hilbert[bond[2].site])÷2, 0) : (0, dimension(hilbert[bond[1].site])÷2)
+        nleft, nright = (bond[1].rcoordinate, bond[1].site) > (bond[2].rcoordinate, bond[2].site) ? (length(hilbert[bond[2].site])÷2, 0) : (0, length(hilbert[bond[1].site])÷2)
     else
         nleft, nright = 0, 0 
     end
@@ -772,4 +809,5 @@ function matrix(ops::Operators, ts₁::TargetSpace, ts₂::TargetSpace, table)
     return hcat([vcat([matrix(ops, (bra, ket), table) for bra in ts₁.sectors]...) for ket in ts₂.sectors]...)
 end
 matrix(ops::Operators, ts::TargetSpace, table) = matrix(ops, ts, ts, table)
+
 end #module 

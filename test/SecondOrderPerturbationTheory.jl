@@ -21,6 +21,7 @@ h0 = OperatorGenerator((U, μ), bonds(lattice, 1), hilbert, half=false)
     bbbond₁ = ⊗(bb₂, bb)
     @test bbbond[1] == bbbond₁
     @test bbbond[1].table == bbbond₁.table
+    @test bbbond[2] == [1, 4, 7, 2, 5, 8, 3, 6, 9]
 end
 @testset "ProjectState" begin
     vectors₁ = rand(3, 2)
@@ -32,19 +33,20 @@ end
     u = rand(2, 2)
     @test (u*ps₁).vectors == (ps₁*u).vectors == (ps₁.vectors)*u
     
-    vectors₂ = rand(3,3) + im*rand(3,3)
-    values₂ = [2, 4.6, 3.5]
-    ps₂ = ProjectState(values₂, vectors₂, TargetSpace(BinaryBases([1, 2, 3], 1)))
+    vectors₂ = rand(6,6) + im*rand(6,6)
+    values₂ = [2, 4.6, 3.5, 5, 6, 8]
+    ps₂ = ProjectState(values₂, vectors₂, TargetSpace(BinaryBases([1, 2, 3, 4], 2)))
     ps₁₂ = ps₁⊕ps₂
     @test ps₁₂.vectors[1:3, 1:2] == ps₁.vectors
     @test ps₁₂.vectors[4:end, 3:end] == ps₂.vectors
     @test ps₁₂.basis == [ps₁.basis.sectors; ps₂.basis.sectors]
+    @test ps₁₂.values == [values₁; values₂]
     @test eltype(ps₂) == eltype(vectors₂) == ComplexF64
     
-    ps₃ = (ProjectState([10, 11], rand(2, 2), TargetSpace(BinaryBases([1, 2], 1)))<<3)
+    ps₃ = (ProjectState([10, 11], rand(2, 2), TargetSpace(BinaryBases([1, 2], 1)))<<4)
     ps₃₂ = ps₂⊗ps₃
     @test ps₃₂.values == [ps₂.values .+ 10; ps₂.values .+ 11]
-    @test ps₃₂.vectors == kron(ps₃.vectors, ps₂.vectors)
+    @test ps₃₂.vectors == kron(ps₃.vectors, ps₂.vectors)[[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],:]
     @test ps₃₂.basis[1] == ps₂.basis[1]⊗ps₃.basis[1]
     
     ts = TargetSpace(BinaryBases([1, 2], 2), BinaryBases([1, 2], 1))
@@ -61,15 +63,17 @@ end
     values₂ = [2, 4.6, 3.5]
     ps₂ = ProjectState(values₂, vectors₂, TargetSpace(BinaryBases([1, 2, 3], 1)))
     ps₃ = (ProjectState([10, 11], rand(2, 2), TargetSpace(BinaryBases([1, 2], 1))))
-    ps₃₂ = ps₂⊗(ps₃<<3)
     psb₂₃ = ProjectStateBond(ps₂, ps₃, 0, 3)
-    @test psb₂₃.both.values == ps₃₂.values
-    @test psb₂₃.both.vectors == ps₃₂.vectors
-    @test psb₂₃.both.basis == ps₃₂.basis
-    psb = ProjectStateBond(ps₂, nothing)
-    @test psb.both.values == ps₂.values
-    @test psb.both.vectors == ps₂.vectors
-    @test psb.both.basis == ps₂.basis
+    @test psb₂₃.left.values == ps₂.values
+    @test psb₂₃.left.vectors == ps₂.vectors
+    @test psb₂₃.left.basis == ps₂.basis
+    @test psb₂₃.right.vectors == ps₃.vectors
+    @test psb₂₃.right.basis == (ps₃<<3).basis
+    psb = ProjectStateBond(ps₂)
+    @test psb.left.values == ps₂.values
+    @test psb.left.vectors == ps₂.vectors
+    @test psb.left.basis == ps₂.basis
+    @test psb.right == nothing
 end
 @testset "SOPT,SecondOrderPerturbation and Coefficience" begin
     bond = Bond(1, Point(1, [0.0], [0.0]), Point(2, [1.0], [0.0]))

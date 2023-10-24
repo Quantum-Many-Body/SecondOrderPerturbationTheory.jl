@@ -1,11 +1,14 @@
 name = "SecondOrderPerturbationTheory"
 uuid = "03d9fef2-6343-4182-b679-65fb479c6bd0"
 authors = ["wwangnju <wwangnju@163.com>"]
-version = "0.2.1"
+version = "0.2.2"
 
 [deps]
+Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+BlockDiagonals = "0a1fb500-61f7-11e9-3c65-f5ef3456f9f0"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 ExactDiagonalization = "52dcaa32-6da7-11e9-20ef-755843cf72eb"
+Kronecker = "2c470bb0-bcc8-11e8-3dad-c9649493f05e"
 Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
@@ -13,6 +16,6 @@ QuantumLattices = "78ae1a1f-1d5d-5174-b61c-66e31b2346dc"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
-ExactDiagonalization = "0.1.4"
-QuantumLattices = "0.9.3"
-julia = "1.8"
+ExactDiagonalization = "0.1.5"
+QuantumLattices = "0.9.11"
+julia = "1.8 - 1.9"
