@@ -12,13 +12,14 @@ using SparseArrays
 using Kronecker: kronecker
 using BlockDiagonals: BlockDiagonal
 
+
 export ⊠, ProjectState, ProjectStateBond, BinaryConfigure, PickState, SecondOrderPerturbation
 export SOPT, SOPTMatrix, hamiltonianeff, projectstate_points, SecondOrderPerturationMetric 
 export coefficience_project, Coefficience, observables_project, SpinOperatorGenerator
 """
     ⊠(bs₁::BinaryBases, bs₂::BinaryBases) -> Tuple{BinaryBases, Vector{Int}}
 
-Get the direct product of two sets of binary bases, and the permutation vector.
+Get the direct product of two sets of binary bases, and the permutation vector. `\boxtimes=⊠`
 """
 function ⊠(bs₁::BinaryBases, bs₂::BinaryBases)
     @assert productable(bs₁, bs₂) "⊠ error: the input two sets of bases cannot be direct producted."
@@ -91,7 +92,14 @@ function Base.convert(::Type{ProjectState{V, C, P}}, ps::ProjectState{V1, C1, P}
     vec = C.(ps.vectors)
     return ProjectState(val, vec, ps.basis)
 end
-
+function Base.show(io::IO, ps::ProjectState)
+    @printf io "%s(%s)=" ":values" typeof(ps.values)
+    Base.show(io, ps.values)
+    @printf io "\n %s(%s)=" ":vectors" typeof(ps.vectors)
+    Base.show(io, ps.vectors)
+    @printf io "\n %s(%s)=" ":basis" nameof(typeof(ps.basis))
+    Base.show(io, ps.basis)
+end
 
 """
     ⊕(ps₁::ProjectState, ps₂::ProjectState) -> ProjectState
@@ -126,7 +134,7 @@ function ⊗(ps₁::ProjectState, ps₂::ProjectState)
         count₀ += length(p₀)
     end
     basis = TargetSpace(bs...)
-    temp = kronecker(ps₂.vectors, ps₁.vectors)
+    temp = kronecker(ps₂.vectors, ps₁.vectors)   # temp = kron(ps₂.vectors, ps₁.vectors)
     vectors = @view temp[p, 1:end]
     return ProjectState(values, vectors, basis)
 end 
@@ -139,7 +147,7 @@ function Base.:(<<)(ps::ProjectState, n::Int)
        basis = TargetSpace([bs << n for bs in ps.basis.sectors]...)
        return ProjectState(ps.values, ps.vectors, basis)
 end
-using Arpack:eigs
+
 """
     ProjectState(ops::Operators, braket::BinaryBases, table; pick::Union{UnitRange{Int}, Vector{Int}, Colon}=:)
     ProjectState(ops::Operators, ts::TargetSpace, table, pick::Vector{Vector{Int}})
@@ -163,9 +171,10 @@ function ProjectState(ops::Operators, ts::TargetSpace, table, pick::Vector{Vecto
     return reduce(⊕, res)
 end
 """
-    ProjectStateBond(left::ProjectState, right::ProjectState)
+    ProjectStateBond
 
-Projected states on a bond. Construct `ProjectStateBond` by the two `ProjectState`s defined on point.
+A type.
+Projected states on a bond. Construct `ProjectStateBond` by the `ProjectState`s defined on points. When bond.kind==2, the `left` (`right`) corresponds to the first (second) point in bond::Bond.
 """
 struct ProjectStateBond
     left::ProjectState
@@ -363,7 +372,7 @@ end
     return res 
 end
 """  
-    hamiltonianeff(psp::ProjectState, psq::ProjectState, h1::Operators, table::Table)  ->Tuple{Matrix, Matrix, Matrix}
+    hamiltonianeff(psp::ProjectStateBond, psq::ProjectStateBond, h1::Operators, table::Table, bond::Union{Bond, Nothing}=nothing)   ->Tuple{Matrix, Matrix, Matrix}
 
 Get the effective Hamiltonian, the first and second terms of the result correspond to the zero-th and 2nd perturbations respectively.
 """
@@ -396,6 +405,7 @@ function hamiltonianeff(psp::ProjectStateBond, psq::ProjectStateBond, h1::Operat
         np1, np2, nq1, nq2 = size(psp.left.vectors, 2), size(psp.right.vectors, 2), size(psq.left.vectors, 2), size(psq.right.vectors, 2)
         tqp = zeros(eltype(psp.left.vectors), nq1*nq2, np1*np2)
         sqp = zeros(eltype(psp.left.vectors), nq1*nq2, np1*np2)
+
         for opt in h1
             mats = []
             qvals = []
@@ -419,9 +429,12 @@ function hamiltonianeff(psp::ProjectStateBond, psq::ProjectStateBond, h1::Operat
                 push!(pvals, p.values)
             end
             tm = opt.value*kronecker(mats[ins[1]], mats[ins[2]])
+            if maximum(abs.(tm)) < 1e-14
+                continue
+            end
             tqp += tm
-            qrlval = _kron(qvals[ins[1]], qvals[ins[2]])
-            prlval = _kron(pvals[ins[1]], pvals[ins[2]])
+            qrlval = _kron(qvals[ins[2]], qvals[ins[1]])
+            prlval = _kron(pvals[ins[2]], pvals[ins[1]])
             for i = 1:np1*np2
                 for j = 1:nq1*nq2
                     sqp[j,i] += -tm[j, i]/(-prlval[i] + qrlval[j])
@@ -519,7 +532,7 @@ end
 """
     SOPTMatrix(bond::Bond, P₀::ProjectStateBond, m₀::Matrix, m₂::Matrix)
 
-Matrix representation of the low-energy hamiltionian. The order of basis of representation is the order of (space of bond[2], space of bond[1]), i.e. (left space of bond[1])⊗(right space of bond[2])
+Matrix representation of the low-energy hamiltionian. The proper order for representing basis vectors is to start with the left space (bond[1]) and then proceed to the right space (bond[2]), i.e. kron(right, left).
 # Arguments
 -`bond`: bond of lattice
 -`P₀`: projected state
@@ -657,8 +670,7 @@ function _coefficience_project(m₂::Matrix{<:Number}, gsg::AbstractVector{T}, n
     for i = 1:nn
         a[:, i] = gsg[i][:]
     end
-    res = pinv(a)*b
-    # res = inv(a)*b
+    res = pinv(a)*b # res = inv(a)*b
     data = norm(b - a*res)/norm(b)
     maximum(abs.(imag.(res))) > 1e-9 && @warn "coefficience warning: the imaginary of coefficience $(maximum(abs.(imag.(res)))) is not ignorable."
     data >= η &&  @warn "coefficience warning: the number of physical observables is not enough ($(data)>η(=$(η)))."

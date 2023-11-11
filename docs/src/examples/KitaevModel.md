@@ -8,7 +8,7 @@ Construct the Kitaev model by projecting multi-orbital Hubbard model into the lo
 
 ```@example KitaevModel
 using QuantumLattices: Lattice, Hopping, Hubbard, Onsite, OperatorGenerator, bonds, Hilbert,  Algorithm
-using QuantumLattices:  InterOrbitalInterSpin, InterOrbitalIntraSpin, SpinFlip, PairHopping, matrix
+using QuantumLattices:  InterOrbitalInterSpin, InterOrbitalIntraSpin, SpinFlip, PairHopping, matrix, Bond
 using QuantumLattices: Point, Fock, MatrixCoupling, ⊗ ,rcoordinate, azimuthd, @σ_str, @L_str, FID
 using ExactDiagonalization: BinaryBases,TargetSpace
 using SecondOrderPerturbationTheory
@@ -44,9 +44,36 @@ J0 = MatrixCoupling(:, FID, L0, σ"0", :)
 UU = 4000.0
 Jₕ = 0.2*UU 
 lambda = 140.0
-t = Hopping(:tz, 1.0, 1, MatrixCoupling(:, FID, tijz, :, :); amplitude=bond->((bond|>rcoordinate|>azimuthd ≈ 270 || bond|>rcoordinate|>azimuthd ≈ 90) ? 1 : 0) )
-t1 = Hopping(:tx, 1.0, 1, MatrixCoupling(:, FID, tijx, :, :); amplitude=bond->((bond|>rcoordinate|>azimuthd ≈ 150 || bond|>rcoordinate|>azimuthd ≈ 330) ? 1 : 0) )
-t2 = Hopping(:ty, 1.0, 1, MatrixCoupling(:, FID, tijy, :, :); amplitude=bond->((bond|>rcoordinate|>azimuthd ≈ 30 || bond|>rcoordinate|>azimuthd ≈ 210) ? 1 : 0) )
+function H1z(t_hop)
+    function temp(bond::Bond)
+    theta = bond|>rcoordinate|>azimuthd
+    ( bond[1].site==1 && (theta≈270 ) ) && (return MatrixCoupling(:, FID,t_hop, σ"0",:))
+     ( bond[1].site==2 && (theta≈90 ) ) && (return MatrixCoupling(:, FID,t_hop', σ"0",:))
+    (return MatrixCoupling(:, FID, zeros(3,3), σ"0",:))
+    end
+    return temp
+end
+function H1x(t_hop)
+    function temp(bond::Bond)
+    theta = bond|>rcoordinate|>azimuthd
+    ( bond[1].site==1 && (theta≈150 ) ) && (return MatrixCoupling(:, FID,t_hop, σ"0",:))
+     ( bond[1].site==2 && (theta≈330 ) ) && (return MatrixCoupling(:, FID,t_hop', σ"0",:))
+    (return MatrixCoupling(:, FID, zeros(3,3), σ"0",:))
+    end
+    return temp
+end
+function H1y(t_hop)
+    function temp(bond::Bond)
+    theta = bond|>rcoordinate|>azimuthd
+    ( bond[1].site==1 && (theta≈30 ) ) && (return MatrixCoupling(:, FID,t_hop, σ"0",:))
+     ( bond[1].site==2 && (theta≈210 ) ) && (return MatrixCoupling(:, FID,t_hop', σ"0",:))
+    (return MatrixCoupling(:, FID, zeros(3,3), σ"0",:))
+    end
+    return temp
+end
+t = Hopping(:tz, 1.0, 1,H1z(tijz) )
+t1 = Hopping(:tx, 1.0, 1,H1x(tijx) )
+t2 = Hopping(:ty, 1.0, 1,H1y(tijy) )
 
 U = Hubbard(:U, UU)
 U′ = InterOrbitalInterSpin(Symbol("U′"), UU-2*Jₕ)
