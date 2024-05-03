@@ -1,7 +1,6 @@
 module SecondOrderPerturbationTheory
 using Printf: @printf
 using LinearAlgebra: eigen, Hermitian, diagm, ishermitian, pinv, norm, inv
-using ExactDiagonalization: BinaryBasis, BinaryBases, TargetSpace, productable, isone, count
 using Base.Iterators: product
 using QuantumLattices: Hilbert, AbstractLattice, OperatorGenerator, Operators, Frontend, Term, Boundary, CompositeDict, Algorithm, Assignment, Parameters
 using QuantumLattices: Transformation, Bond, id, expand!, isintracell, Neighbors, Point, SpinTerm, Spin, Action, rcoordinate, icoordinate
@@ -11,7 +10,12 @@ using DelimitedFiles: writedlm
 using SparseArrays
 using Kronecker: kronecker
 using BlockDiagonals: BlockDiagonal
+import Base.write
+using Latexify
 
+include("ExactDiagonalization5.jl")
+using .ExactDiagonalization5: BinaryBasis, BinaryBases, TargetSpace, productable, isone, count
+export BinaryBases, TargetSpace
 
 export ⊠, ProjectState, ProjectStateBond, BinaryConfigure, PickState, SecondOrderPerturbation
 export SOPT, SOPTMatrix, hamiltonianeff, projectstate_points, SecondOrderPerturationMetric 
@@ -478,8 +482,8 @@ Construct the second order perturbation method for a quantum lattice system.
 """
 function SOPT(lattice::AbstractLattice, hilbert::Hilbert, terms₁::Tuple{Vararg{Term}}, terms₀::Tuple{Vararg{Term}}, binaryconfigure::BinaryConfigure, lowstate::PickState; neighbors::Union{Nothing, Int, Neighbors}=nothing, boundary::Boundary=plain)
     isnothing(neighbors) && (neighbors = maximum(terms₁->terms₁.bondkind, terms₁))
-    H₁ = OperatorGenerator(terms₁, bonds(lattice, neighbors), hilbert; half=false, boundary=boundary)
-    H₀ = OperatorGenerator(terms₀, bonds(lattice, 0), hilbert; half=false, boundary=boundary)
+    H₁ = OperatorGenerator(terms₁, bonds(lattice, neighbors), hilbert, boundary; half=false)
+    H₀ = OperatorGenerator(terms₀, bonds(lattice, 0), hilbert, boundary; half=false)
     configure = SecondOrderPerturbation(binaryconfigure, lowstate)
     return SOPT(lattice, H₁, H₀, configure)
 end
@@ -671,6 +675,7 @@ function _coefficience_project(m₂::Matrix{<:Number}, gsg::AbstractVector{T}, n
         a[:, i] = gsg[i][:]
     end
     res = pinv(a)*b # res = inv(a)*b
+    # res = inv(a)*b
     data = norm(b - a*res)/norm(b)
     maximum(abs.(imag.(res))) > 1e-9 && @warn "coefficience warning: the imaginary of coefficience $(maximum(abs.(imag.(res)))) is not ignorable."
     data >= η &&  @warn "coefficience warning: the number of physical observables is not enough ($(data)>η(=$(η)))."
@@ -718,8 +723,7 @@ function observables_project(terms::Tuple{Vararg{Term}}, point::Point, hilbert::
 end
 
 #output
-import Base.write
-using Latexify
+
 function Base.write(filename::AbstractString, jcoef::Tuple{Algorithm{<:SOPT}, Assignment{<:Coefficience}}; scale=1)
     assign = jcoef[2]
     dist = []
@@ -808,7 +812,7 @@ function SpinOperatorGenerator(st::SOPT, coef::Coefficience; η::Float64=1e-14)
             end
         end 
         hilbert = Hilbert(pid=>Spin{1//2}() for pid in 1:length(st.lattice))
-        return OperatorGenerator(tuple(terms...), st.H₁.bonds, hilbert; half=false, boundary=plain)
+        return OperatorGenerator(tuple(terms...), st.H₁.bonds, hilbert; half=false)
     end
 end
 """

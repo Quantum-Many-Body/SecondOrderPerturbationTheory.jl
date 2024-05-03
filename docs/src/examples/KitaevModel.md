@@ -7,10 +7,9 @@ CurrentModule = SecondOrderPerturbationTheory
 Construct the Kitaev model by projecting multi-orbital Hubbard model into the low-energy hilbert space.
 
 ```@example KitaevModel
-using QuantumLattices: Lattice, Hopping, Hubbard, Onsite, OperatorGenerator, bonds, Hilbert,  Algorithm
+using QuantumLattices: Lattice, Hopping, Hubbard, Onsite, bonds, Hilbert,  Algorithm
 using QuantumLattices:  InterOrbitalInterSpin, InterOrbitalIntraSpin, SpinFlip, PairHopping, matrix, Bond
 using QuantumLattices: Point, Fock, MatrixCoupling, ⊗ ,rcoordinate, azimuthd, @σ_str, @L_str, FID
-using ExactDiagonalization: BinaryBases,TargetSpace
 using SecondOrderPerturbationTheory
 
 #define lattice, hilbert, and multi-orbital Hubbard model
@@ -131,9 +130,10 @@ J31 = 8*A/9*(-(tzy-tyz)*(txy-tyx)-(tzx-txz)*(txx+tyy+tzz)) + 4*B/9*(txy*(5*tzy-2
 ```
 
 ## Construct the Generator of pseudospin-1/2
+
 ```@example KitaevModel
 #define Generator of spin-1/2
-gen = SpinOperatorGenerator(sopt, coeff;η=1e-10)
+gen = SpinOperatorGenerator(sopt, coeff; η=1e-10)
 
 #latexformat of spin-1/2, add :icoord subscript.
 using QuantumLattices: idtype, latexformat, LaTeX, expand

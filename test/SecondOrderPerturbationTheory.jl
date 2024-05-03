@@ -1,10 +1,10 @@
 using Test
 using QuantumLattices: Lattice, dimension, ⊗, ⊕, matrix, expand, Table, Point, Fock, Algorithm
 using QuantumLattices: Hopping, Hubbard, Onsite, OperatorGenerator, bonds, Hilbert, Bond, MatrixCoupling, FID
-using ExactDiagonalization: BinaryBases, TargetSpace
+# using ExactDiagonalization: BinaryBases, TargetSpace
 using LinearAlgebra: diag
 using SecondOrderPerturbationTheory
-
+using SecondOrderPerturbationTheory.ExactDiagonalization5: BinaryBases, TargetSpace
 
 lattice = Lattice( (0.0,), (1.0,); vectors=[[2.0]])
 hilbert = Hilbert(pid=>Fock{:f}(1, 2) for pid in 1:length(lattice))

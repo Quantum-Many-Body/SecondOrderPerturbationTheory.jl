@@ -116,12 +116,6 @@ deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 version = "1.6.0"
 
-[[ExactDiagonalization]]
-deps = ["Arpack", "LinearAlgebra", "Printf", "QuantumLattices", "SparseArrays"]
-git-tree-sha1 = "f0c3f1b923a06b490f8a9196039d562088fa9025"
-uuid = "52dcaa32-6da7-11e9-20ef-755843cf72eb"
-version = "0.1.5"
-
 [[ExprTools]]
 git-tree-sha1 = "27415f162e6028e81c72b82ef756bf321213b6ec"
 uuid = "e2ba6199-217a-4e67-a87a-7c52f15ade04"
@@ -141,6 +135,11 @@ deps = ["ChainRulesCore", "LinearAlgebra", "Printf", "Random", "Richardson", "Sp
 git-tree-sha1 = "98a4571ba51bf172c798e7cde9b16c11c1e22e6d"
 uuid = "26cc04aa-876d-5657-8c51-4c34ba976000"
 version = "0.12.30"
+
+[[Format]]
+git-tree-sha1 = "9c68794ef81b08086aeb32eeaf33531668d5f5fc"
+uuid = "1fa38f19-a742-5d3f-a2b9-30dd87b9d5f8"
+version = "1.3.7"
 
 [[Formatting]]
 deps = ["Printf"]
@@ -309,10 +308,10 @@ deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [[QuantumLattices]]
-deps = ["DataStructures", "DelimitedFiles", "Formatting", "LaTeXStrings", "Latexify", "LinearAlgebra", "NearestNeighbors", "Printf", "Random", "RecipesBase", "Serialization", "SparseArrays", "StaticArrays", "TimerOutputs"]
-git-tree-sha1 = "349f554cec8a9a115ad726c4a7f6a7ba309bdfbd"
+deps = ["DataStructures", "DelimitedFiles", "Format", "LaTeXStrings", "Latexify", "LinearAlgebra", "NearestNeighbors", "Printf", "Random", "RecipesBase", "Serialization", "SparseArrays", "StaticArrays", "TimerOutputs"]
+git-tree-sha1 = "f0df9751d525f80acd556e45e5248df12d39d8b3"
 uuid = "78ae1a1f-1d5d-5174-b61c-66e31b2346dc"
-version = "0.9.12"
+version = "0.9.14"
 
 [[REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
