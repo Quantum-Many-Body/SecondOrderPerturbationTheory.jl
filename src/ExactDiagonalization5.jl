@@ -1,5 +1,4 @@
 module ExactDiagonalization5
-
 using Arpack: eigs
 using Base.Iterators: product
 using LinearAlgebra: Eigen
@@ -19,8 +18,8 @@ import QuantumLattices: contentnames, getcontent, parameternames
 import QuantumLattices: statistics
 import QuantumLattices: Parameters
 
-export BinaryBases, BinaryBasis, BinaryBasisRange, Sector, TargetSpace
-export ED, EDKind, EDMatrix, EDMatrixRepresentation, SectorFilter
+export BinaryBases, TargetSpace, BinaryBasis
+export ED, EDKind, EDMatrix, EDMatrixRepresentation, SectorFilter, BinaryBasisRange, Sector
 export productable, sumable
 
 """

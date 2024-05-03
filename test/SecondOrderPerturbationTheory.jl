@@ -3,7 +3,9 @@ using QuantumLattices: Lattice, dimension, ⊗, ⊕, matrix, expand, Table, Poin
 using QuantumLattices: Hopping, Hubbard, Onsite, OperatorGenerator, bonds, Hilbert, Bond, MatrixCoupling, FID
 # using ExactDiagonalization: BinaryBases, TargetSpace
 using LinearAlgebra: diag
-using SecondOrderPerturbationTheory
+using SecondOrderPerturbationTheory.SOPCore: ⊠, ProjectState, ProjectStateBond, BinaryConfigure, PickState, SecondOrderPerturbation
+using SecondOrderPerturbationTheory.SOPCore: SOPT, SOPTMatrix, hamiltonianeff, projectstate_points, SecondOrderPerturationMetric 
+using SecondOrderPerturbationTheory.SOPCore: coefficience_project, Coefficience, observables_project, SpinOperatorGenerator
 using SecondOrderPerturbationTheory.ExactDiagonalization5: BinaryBases, TargetSpace
 
 lattice = Lattice( (0.0,), (1.0,); vectors=[[2.0]])

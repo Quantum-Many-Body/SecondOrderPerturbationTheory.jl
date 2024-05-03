@@ -13,7 +13,7 @@ Documentation for [SecondOrderPerturbationTheory](https://github.com/Quantum-Man
 [Examples of second order perturbation theory](@ref examples)
 
 
-## Manuals
+<!-- ## Manuals
 ```@autodocs
-Modules = [SecondOrderPerturbationTheory]
-```
+Modules = [SecondOrderPerturbationTheory, SecondOrderPerturbationTheory.ExactDiagonalization5,SecondOrderPerturbationTheory.SOPCore ]
+``` -->
